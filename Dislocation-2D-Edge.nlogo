@@ -40,14 +40,14 @@ to setup-atoms
     set color blue
   ]
   ;; simple cubic setup
-  let l num-atoms-per-row ;the # of atoms in a row
+  let len num-atoms-per-row ;; the # of atoms in a row
   set r0 1 ;; distance from any atom to another atom, in either x or y direction. Also, eq bond length
-  let ypos (- l * r0 / 2) ;; the y position of the first atom (????????)
-  let xpos (- l * r0 / 2) ;; the x position of the first atom (????????)
+  let ypos (- len * r0 / 2) ;; the y position of the first atom (????????)
+  let xpos (- len * r0 / 2) ;; the x position of the first atom (????????)
   let atoms-in-row 0 ;; keeps track of the atoms in the current row being built
   ask turtles [  ;; set the atoms' positions
     if atoms-in-row = num-atoms-per-row [  ;; condition to start a new row
-      set xpos (- l * r0 / 2)
+      set xpos (- len * r0 / 2)
       set ypos ypos + r0
       set atoms-in-row 0
     ]
@@ -99,7 +99,7 @@ to update-force-and-velocity
   let new-fx 0
   let new-fy 0
   ask link-neighbors [ ;; only calculate LJ force from turtles that a given turtle is linked to
-  ;; ask turtles-on neighbors4 [ ;; only calculate LJ force from turtles that a given turtle is neighbors with
+  ;; ask other atoms in-radius ( 2 * r0 ) [ ;; only calculate LJ force from turtles that a given turtle is neighbors with
     let r distance myself
     let force (LJ-force r )
     face myself
@@ -146,12 +146,12 @@ end
 to form-bonds
   ask atoms [
     if any? other atoms in-radius ( 2 * r0 ) [
-      while [ num-of-bonds < 4 and any? other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 ]] [
-        ask min-one-of other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 ] [distance myself] [
-          create-link-with myself
+      while [ num-of-bonds < 4 and any? other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 and not link-neighbor? myself]] [
+        ask min-one-of ( other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 and not link-neighbor? myself] ) [distance myself] [
           set num-of-bonds num-of-bonds + 1
-          ask myself [ set num-of-bonds num-of-bonds + 1 ]
+          create-link-with myself
         ]
+        set num-of-bonds num-of-bonds + 1
       ]
     ]
   ]
@@ -252,6 +252,23 @@ BUTTON
 NIL
 go
 T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+88
+198
+151
+231
+NIL
+go
+NIL
 1
 T
 OBSERVER
