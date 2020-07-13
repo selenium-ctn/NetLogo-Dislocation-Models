@@ -1,15 +1,62 @@
+breed [atoms atom]
 
+atoms-own [
+  num-of-bonds ;; the number of bonds an atom currently has, should not surpass 4
+]
+
+globals[]
+
+;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;; SETUP ;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+to setup
+  clear-all
+  setup-atoms
+  setup-bonds
+end
+
+to setup-atoms
+  set-default-shape turtles "circle"
+  create-atoms num-atoms-per-row * num-atoms-per-row [ ;; square, to show dislocation
+    set size .5 ;; diameter
+    set shape "circle"
+    set color blue
+  ]
+  ;; simple cubic setup
+  let l num-atoms-per-row ;the # of atoms in a row
+    let xy-dist 1 ;; distance from any atom to another atom, in either x or y direction
+    let ypos (- l * xy-dist / 2) ;; the y position of the first atom (????????)
+    let xpos (- l * xy-dist / 2) ;; the x position of the first atom (????????)
+    let atoms-in-row 0 ;; keeps track of the atoms in the current row being built
+    ask turtles [  ;; set the atoms' positions
+      if atoms-in-row = num-atoms-per-row [  ;; condition to start a new row
+        set xpos (- l * xy-dist / 2)
+        set ypos ypos + xy-dist
+        set atoms-in-row 0
+      ]
+      set atoms-in-row atoms-in-row + 1 ;; increment number of atoms in row
+      setxy xpos ypos  ;; if we are still in the same row
+      set xpos xpos + xy-dist
+    ]
+end
+
+to setup-bonds
+  ask turtles [
+    create-links-with turtles-on neighbors4
+  ]
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
 10
-647
-448
+743
+544
 -1
 -1
-13.0
+25.0
 1
-10
+18
 1
 1
 1
@@ -17,15 +64,47 @@ GRAPHICS-WINDOW
 1
 1
 1
--16
-16
--16
-16
+-10
+10
+-10
+10
 0
 0
 1
 ticks
 30.0
+
+SLIDER
+17
+77
+189
+110
+num-atoms-per-row
+num-atoms-per-row
+0
+10
+9.0
+1
+1
+NIL
+HORIZONTAL
+
+BUTTON
+20
+22
+83
+55
+setup
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
