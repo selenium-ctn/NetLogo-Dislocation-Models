@@ -13,6 +13,7 @@ atoms-own [
 globals[
   eps ;; for LJ potential/force calculations
   sigma ;; for LJ potential/force calculations
+  r0 ;; equilibrium bond length
   time-step
 ]
 
@@ -26,7 +27,7 @@ to setup
   setup-bonds
   init-velocity
   set eps .02 ;; *may change*
-  set sigma .02 ;; *may change*
+  set sigma .895 ;; *may change*
   set time-step 0.02 ;; *may change*
   reset-ticks
 end
@@ -40,30 +41,33 @@ to setup-atoms
   ]
   ;; simple cubic setup
   let l num-atoms-per-row ;the # of atoms in a row
-    let xy-dist 1 ;; distance from any atom to another atom, in either x or y direction
-    let ypos (- l * xy-dist / 2) ;; the y position of the first atom (????????)
-    let xpos (- l * xy-dist / 2) ;; the x position of the first atom (????????)
-    let atoms-in-row 0 ;; keeps track of the atoms in the current row being built
-    ask turtles [  ;; set the atoms' positions
-      if atoms-in-row = num-atoms-per-row [  ;; condition to start a new row
-        set xpos (- l * xy-dist / 2)
-        set ypos ypos + xy-dist
-        set atoms-in-row 0
-      ]
-      set atoms-in-row atoms-in-row + 1 ;; increment number of atoms in row
-      setxy xpos ypos  ;; if we are still in the same row
-      set xpos xpos + xy-dist
+  set r0 1 ;; distance from any atom to another atom, in either x or y direction. Also, eq bond length
+  let ypos (- l * r0 / 2) ;; the y position of the first atom (????????)
+  let xpos (- l * r0 / 2) ;; the x position of the first atom (????????)
+  let atoms-in-row 0 ;; keeps track of the atoms in the current row being built
+  ask turtles [  ;; set the atoms' positions
+    if atoms-in-row = num-atoms-per-row [  ;; condition to start a new row
+      set xpos (- l * r0 / 2)
+      set ypos ypos + r0
+      set atoms-in-row 0
     ]
+    set atoms-in-row atoms-in-row + 1 ;; increment number of atoms in row
+    setxy xpos ypos  ;; if we are still in the same row
+    set xpos xpos + r0
+  ]
 end
 
 to setup-bonds
   ask turtles [
     create-links-with turtles-on neighbors4
   ]
+  ask turtles [
+    set num-of-bonds count link-neighbors
+  ]
 end
 
 to init-velocity ;; initialize lattice vibrations and thus velocity
-  let sqrt-kb-over-m ( 1 / 10)
+  let sqrt-kb-over-m ( 1 / 100) ;; can change, not totally sure about this value (???????)
   let v-avg sqrt-kb-over-m * sqrt init-temp
   ask atoms [
     let x-y-split random-float 1
@@ -87,9 +91,7 @@ to go
   ask atoms [
     move
   ]
-  ask atoms [
-    update-bonds
-  ]
+  update-bonds
   tick-advance time-step
 end
 
@@ -97,10 +99,10 @@ to update-force-and-velocity
   let new-fx 0
   let new-fy 0
   ask link-neighbors [ ;; only calculate LJ force from turtles that a given turtle is linked to
+;;ask turtles-on neighbors [ ;; only calculate LJ force from turtles that a given turtle is neighbors with
     let r distance myself
     let force (LJ-force r )
     face myself
-    ;; rt 180 ;; <- !!!! In Jacob's code, but I don't understand why
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
   ]
@@ -126,6 +128,33 @@ to-report velocity-verlet-pos [pos v a]  ;; position, velocity and acceleration
 end
 
 to update-bonds
+  break-bonds
+  form-bonds
+end
+
+to break-bonds
+  ask links [
+    if link-length > 3 * r0 [
+      ask both-ends [
+        set num-of-bonds num-of-bonds - 1
+      ]
+      die
+    ]
+  ]
+end
+
+to form-bonds
+  ask atoms [
+    if any? other atoms in-radius ( 3 * r0 ) [
+      while [ [ num-of-bonds ] of myself < 5 ] [
+        ask min-one-of other atoms in-radius ( 3 * r0 ) with [ num-of-bonds <= 4 ] [
+          create-link-with myself
+          set num-of-bonds num-of-bonds + 1
+          ask myself [ set num-of-bonds num-of-bonds + 1 ]
+        ]
+      ]
+    ]
+  ]
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
