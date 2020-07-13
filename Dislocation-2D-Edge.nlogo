@@ -2,18 +2,33 @@ breed [atoms atom]
 
 atoms-own [
   num-of-bonds ;; the number of bonds an atom currently has, should not surpass 4
+  fx     ;; x-component of force vector
+  fy     ;; y-component of force vector
+  prev-x ;; x-coordinate in previous time step
+  prev-y ;; y-coordinate in previous time step
+  vx     ;; x-component of velocity vector
+  vy     ;; y-component of velocity vector
 ]
 
-globals[]
+globals[
+  eps ;; for LJ potential/force calculations
+  sigma ;; for LJ potential/force calculations
+  time-step
+]
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;; SETUP ;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;; Setup ;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to setup
   clear-all
   setup-atoms
   setup-bonds
+  init-velocity
+  set eps .02 ;; *may change*
+  set sigma 1 ;; *may change*
+  set time-step 0.02 ;; *may change*
+  reset-ticks
 end
 
 to setup-atoms
@@ -45,6 +60,58 @@ to setup-bonds
   ask turtles [
     create-links-with turtles-on neighbors4
   ]
+end
+
+to init-velocity ;; initialize lattice vibrations and thus velocity
+  let sqrt-kb-over-m ( 1 / 10)
+  let v-avg sqrt-kb-over-m * sqrt init-temp
+  ask particles [
+    let x-y-split random float 1
+    set vx v-avg * x-y-split * positive-or-negative
+    set vy v-avg * (1 - x-y-split) * positive-or-negative
+  ]
+end
+
+to-report positive-or-negative
+  report ifelse-value random 2 = 0 [-1] [1]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Runtime Procedures ;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to go
+  ask particles [
+    update-force-and-velocity
+  ]
+  ask particles [
+    move
+  ]
+  ask particles [
+    update-bonds
+  ]
+end
+
+to update-force-and-velocity
+end
+
+to move
+end
+
+to update-bonds
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Potential/Force Functions ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report LJ-potential [r]
+  report 4 * eps * ((sigma / r) ^ 12 - (sigma / r) ^ 6)
+end
+
+to-report LJ-force [r]
+  ;; report -4 * eps * ((-12 * (sigma ^ 12) / (r ^ 13))  + (6 * (sigma ^ 6) / (r ^ 7)))
+  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -83,7 +150,7 @@ num-atoms-per-row
 num-atoms-per-row
 0
 10
-9.0
+8.0
 1
 1
 NIL
@@ -105,6 +172,21 @@ NIL
 NIL
 NIL
 1
+
+SLIDER
+17
+122
+189
+155
+init-temp
+init-temp
+0
+3.0
+2.7
+.1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
