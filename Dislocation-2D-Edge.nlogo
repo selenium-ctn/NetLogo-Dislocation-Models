@@ -99,7 +99,7 @@ to update-force-and-velocity
   let new-fx 0
   let new-fy 0
   ask link-neighbors [ ;; only calculate LJ force from turtles that a given turtle is linked to
-;;ask turtles-on neighbors [ ;; only calculate LJ force from turtles that a given turtle is neighbors with
+  ;; ask turtles-on neighbors4 [ ;; only calculate LJ force from turtles that a given turtle is neighbors with
     let r distance myself
     let force (LJ-force r )
     face myself
@@ -134,7 +134,7 @@ end
 
 to break-bonds
   ask links [
-    if link-length > 3 * r0 [
+    if link-length > 2 * r0 [
       ask both-ends [
         set num-of-bonds num-of-bonds - 1
       ]
@@ -145,9 +145,9 @@ end
 
 to form-bonds
   ask atoms [
-    if any? other atoms in-radius ( 3 * r0 ) [
-      while [ [ num-of-bonds ] of myself < 5 ] [
-        ask min-one-of other atoms in-radius ( 3 * r0 ) with [ num-of-bonds <= 4 ] [
+    if any? other atoms in-radius ( 2 * r0 ) [
+      while [ num-of-bonds < 4 and any? other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 ]] [
+        ask min-one-of other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 ] [distance myself] [
           create-link-with myself
           set num-of-bonds num-of-bonds + 1
           ask myself [ set num-of-bonds num-of-bonds + 1 ]
