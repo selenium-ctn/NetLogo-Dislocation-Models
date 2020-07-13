@@ -26,7 +26,7 @@ to setup
   setup-bonds
   init-velocity
   set eps .02 ;; *may change*
-  set sigma 1 ;; *may change*
+  set sigma .02 ;; *may change*
   set time-step 0.02 ;; *may change*
   reset-ticks
 end
@@ -65,8 +65,8 @@ end
 to init-velocity ;; initialize lattice vibrations and thus velocity
   let sqrt-kb-over-m ( 1 / 10)
   let v-avg sqrt-kb-over-m * sqrt init-temp
-  ask particles [
-    let x-y-split random float 1
+  ask atoms [
+    let x-y-split random-float 1
     set vx v-avg * x-y-split * positive-or-negative
     set vy v-avg * (1 - x-y-split) * positive-or-negative
   ]
@@ -81,21 +81,48 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  ask particles [
+  ask atoms [
     update-force-and-velocity
   ]
-  ask particles [
+  ask atoms [
     move
   ]
-  ask particles [
+  ask atoms [
     update-bonds
   ]
+  tick-advance time-step
 end
 
 to update-force-and-velocity
+  let new-fx 0
+  let new-fy 0
+  ask link-neighbors [ ;; only calculate LJ force from turtles that a given turtle is linked to
+    let r distance myself
+    let force (LJ-force r )
+    face myself
+    ;; rt 180 ;; <- !!!! In Jacob's code, but I don't understand why
+    set new-fx new-fx + (force * dx)
+    set new-fy new-fy + (force * dy)
+  ]
+  set vx velocity-verlet-velocity vx fx new-fx
+  set vy velocity-verlet-velocity vy fy new-fy
+  set fx new-fx
+  set fy new-fy
+end
+
+to-report velocity-verlet-velocity [v a new-a]  ;; position and velocity
+  report v + (1 / 2) * (new-a + a) * time-step
 end
 
 to move
+  set prev-x xcor
+  set prev-y ycor
+  set xcor velocity-verlet-pos xcor vx fx
+  set ycor velocity-verlet-pos ycor vy fy
+end
+
+to-report velocity-verlet-pos [pos v a]  ;; position, velocity and acceleration
+  report pos + v * time-step + (1 / 2) * a * (time-step ^ 2)
 end
 
 to update-bonds
@@ -182,11 +209,28 @@ init-temp
 init-temp
 0
 3.0
-2.7
+2.1
 .1
 1
 NIL
 HORIZONTAL
+
+BUTTON
+115
+23
+178
+56
+NIL
+go
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
