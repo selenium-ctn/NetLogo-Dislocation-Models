@@ -15,6 +15,7 @@ globals[
   sigma ;; for LJ potential/force calculations
   r0 ;; equilibrium bond length
   time-step
+  bonding-dist ;; distance at which bonds will either break or form
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -27,8 +28,9 @@ to setup
   setup-bonds
   init-velocity
   set eps .02 ;; *may change*
-  set sigma .895 ;; *may change*
+  set sigma .90 ;; .8909 ;; *may change*
   set time-step 0.02 ;; *may change*
+  set bonding-dist 2  * r0
   reset-ticks
 end
 
@@ -129,12 +131,12 @@ end
 
 to update-bonds
   break-bonds
-  form-bonds
+  ;;form-bonds
 end
 
 to break-bonds
   ask links [
-    if link-length > 2 * r0 [
+    if link-length > bonding-dist [
       ask both-ends [
         set num-of-bonds num-of-bonds - 1
       ]
@@ -145,17 +147,30 @@ end
 
 to form-bonds
   ask atoms [
-    if any? other atoms in-radius ( 2 * r0 ) [
-      while [ num-of-bonds < 4 and any? other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 and not link-neighbor? myself]] [
-        ask min-one-of ( other atoms in-radius ( 2 * r0 ) with [ num-of-bonds < 4 and not link-neighbor? myself] ) [distance myself] [
-          set num-of-bonds num-of-bonds + 1
-          create-link-with myself
+    if any? other atoms in-radius ( bonding-dist ) [
+      while [ num-of-bonds < 4 and any? other atoms in-radius ( bonding-dist ) with [ num-of-bonds < 4 and not link-neighbor? myself]] [
+        ask min-one-of ( other atoms in-radius ( bonding-dist ) with [ num-of-bonds < 4 and not link-neighbor? myself] ) [distance myself] [
+          face myself
+          if not any? link-neighbors in-cone bonding-dist 100 [
+            set num-of-bonds num-of-bonds + 1
+            create-link-with myself
+          ]
         ]
         set num-of-bonds num-of-bonds + 1
       ]
     ]
   ]
 end
+
+;to update-bonds
+;  ask atoms [
+;    ask min-n-of num-of-bonds other atoms in-radius ( bonding-dist ) [
+;      if not link-neighbor? myself ) [
+;        create-link-with myself
+;      ]
+;    ]
+;  ]
+;end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Potential/Force Functions ;;
@@ -205,8 +220,8 @@ SLIDER
 num-atoms-per-row
 num-atoms-per-row
 0
-10
-8.0
+20
+11.0
 1
 1
 NIL
@@ -238,7 +253,7 @@ init-temp
 init-temp
 0
 3.0
-2.1
+2.3
 .1
 1
 NIL
