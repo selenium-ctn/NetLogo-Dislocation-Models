@@ -11,6 +11,7 @@ particles-own [
   vy     ; y-component of velocity vector
   force-act ; 0 = no force, 1 = force going left, 2 = don't move
   top-force ; 0 = no , 1 = yes
+  tension ; 0 = no, 1 = yes left, 2 = yes right
 ]
 
 globals [
@@ -36,7 +37,8 @@ to setup
   set cutoff-dist 5 * r-min
   setup-atoms
   init-velocity
-  create-disloc
+  ;;create-disloc
+  tension-init
   reset-timer
   reset-ticks
 end
@@ -80,14 +82,22 @@ to setup-atoms
       (ifelse r-num < 5 [
          setxy xpos ypos  ;if we are still in the same row
          set xpos xpos + x-dist
-         if atom-num = 10 or atom-num = 1 [
+         (ifelse atom-num = 10 [
            set force-act 2
+           set tension 2
          ]
+          atom-num = 1 [
+            set force-act 2
+            set tension 1
+          ])
            set atom-num atom-num + 1
          ]
        [
         setxy xpos ypos  ;if we are still in the same row
         set xpos xpos + new-x-dist ;; + .01 * atom-num
+        if atom-num = 10 [
+            set tension 2
+           ]
         if r-num = 9 and atom-num != 10 [
              set top-force 1
            ]
@@ -126,6 +136,11 @@ to create-disloc
   ask turtles-on patches with [pxcor = -2 and pycor = 3 ] [ die ]
 end
 
+to tension-init
+  ask turtles-on patches with [pxcor = 5 and pycor = 3] [die]
+  ask turtles-on patches with [pxcor = -5 and pycor = -5] [die]
+end
+
 to-report random-1d-bolztman
   ; To get the random number, pick a random number y between 0 and 1 uniformly
   ; Then pick x such that CDF(x) = y.
@@ -160,10 +175,15 @@ end
 
 to go
   ask particles [
-    update-force-and-velocity
+    ;;update-force-and-velocity
+    update-force-and-velocity-tension
   ]
+ ;; ask particles [
+   ; update-color
+  ;]
   ask particles [
-    move
+    ;;move
+    move-tension
   ]
   tick-advance time-step
   update-plots
@@ -192,7 +212,7 @@ to update-force-and-velocity  ; particle procedure
    ifelse top-force = 1  [
      set vy velocity-verlet-velocity vy fy new-fy - (f-app-top / 100)
      set fy new-fy - (f-app-top / 100)
-
+     set heading 180
    ]
    [
     set vy velocity-verlet-velocity vy fy new-fy
@@ -200,8 +220,40 @@ to update-force-and-velocity  ; particle procedure
    ]
 end
 
+to update-force-and-velocity-tension
+  let new-fx 0
+  let new-fy 0
+  ask other particles in-radius cutoff-dist [
+    let r distance myself
+    let force calc-force r
+    face myself
+    rt 180
+    set new-fx new-fx + (force * dx)
+    set new-fy new-fy + (force * dy)]
+   (ifelse force-act = 1 or tension = 1 [
+    set vx velocity-verlet-velocity vx fx (new-fx - f-app)
+    set fx new-fx - f-app
+    set heading 270
+   ]
+    tension = 2 [
+    set vx velocity-verlet-velocity vx fx (new-fx + f-app)
+    set fx new-fx + f-app
+    set heading 90
+    ]
+   [
+    set vx velocity-verlet-velocity vx fx new-fx
+    set fx new-fx
+  ])
+  set vy velocity-verlet-velocity vy fy new-fy
+  set fy new-fy
+end
+
 to-report calc-force [ r ]
   report (- eps / (r ^ 7)) * ((r ^ -6) - 1)
+end
+
+to update-color
+  set-color calc-V
 end
 
 to move  ; particle procedure
@@ -214,12 +266,42 @@ to move  ; particle procedure
   ]
 end
 
+to move-tension
+  set prev-x xcor
+  set prev-y ycor
+  set xcor velocity-verlet-pos xcor vx fx
+  set ycor velocity-verlet-pos ycor vy fy
+end
+
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
   report pos + v * time-step + (1 / 2) * a * (time-step ^ 2)
 end
 
 to-report velocity-verlet-velocity [v a new-a]  ; position and velocity
   report v + (1 / 2) * (new-a + a) * time-step
+end
+
+to set-color [v]
+  set color scale-color blue v -10 0
+end
+
+to-report calc-V
+  let V 0
+  let Vi 0
+  let repel-term 0
+  let attract-term 0
+  let rsquare 0
+  ask other turtles in-radius CUTOFF-DIST [
+    ;set rsquare (xcor - [xcor] of myself) ^ 2 + (ycor - [ycor] of myself) ^ 2
+    set rsquare (distance myself) ^ 2
+    let dsquare DIAMETER * DIAMETER
+    set attract-term (dsquare * dsquare * dsquare)  / (rsquare * rsquare * rsquare)
+    set repel-term attract-term * attract-term
+    ;NOTE could do this a little faster by attract-term * (attract-term -1)
+    set Vi 4 * EPS * (repel-term - attract-term) + (- (4 * ((DIAMETER / CUTOFF-DIST) ^ 12 - (DIAMETER / CUTOFF-DIST) ^ 6)) )
+    set V V + Vi
+  ]
+  report V
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -236,7 +318,7 @@ GRAPHICS-WINDOW
 1
 1
 0
-1
+0
 1
 1
 -10
@@ -346,7 +428,7 @@ f-app
 f-app
 0
 .5
-0.226
+0.191
 .001
 1
 NIL
@@ -361,7 +443,7 @@ f-app-top
 f-app-top
 0
 .5
-0.16
+0.0
 .01
 1
 NIL
