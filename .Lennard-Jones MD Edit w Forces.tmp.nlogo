@@ -32,12 +32,14 @@ to setup
   set num-atoms 100
   set diameter .9
   set r-min 1
-  set eps 1
-  set sigma .90
+  set eps .07
+  set sigma .907
   set cutoff-dist 5 * r-min
   setup-atoms
   init-velocity
-  ;;create-disloc
+  if force-mode = "Shear" [
+    create-disloc
+  ]
   ;;tension-init
   reset-timer
   reset-ticks
@@ -79,7 +81,7 @@ to setup-atoms
         ]
       )
 
-      (ifelse r-num < 4 [
+      (ifelse r-num < 5 [
          setxy xpos ypos  ;if we are still in the same row
          set xpos xpos + x-dist
 
@@ -163,9 +165,10 @@ end
 
 to go
 ;  ask particles [
-;    set vx vx * .5
-;    set vy vy * .5
+;    set vx vx * .98
+;    set vy vy * .98
 ;  ]
+  control-temp
   (ifelse force-mode = "Shear" [
     ask particles [
       update-force-and-velocity
@@ -181,9 +184,9 @@ to go
     ask particles [
       update-force-and-velocity-tension
     ]
-    ask particles [
-      update-color
-    ]
+;    ask particles [
+;      update-color
+;    ]
     ask particles [
       move-tension
     ]
@@ -211,8 +214,8 @@ to update-force-and-velocity  ; particle procedure
     set fx new-fx
    ])
    (ifelse posi = "ulc" or posi = "t" or posi = "urc"  [
-     set vy velocity-verlet-velocity vy fy new-fy - (f-app-top / 100)
-     set fy new-fy - (f-app-top / 100)
+     set vy velocity-verlet-velocity vy fy new-fy - (f-app-vert / 100)
+     set fy new-fy - (f-app-vert / 100)
    ]
    [
     set vy velocity-verlet-velocity vy fy new-fy
@@ -242,8 +245,19 @@ to update-force-and-velocity-tension
     set vx velocity-verlet-velocity vx fx new-fx
     set fx new-fx
   ])
-  set vy velocity-verlet-velocity vy fy new-fy
-  set fy new-fy
+
+  (ifelse posi = "ulc" or posi = "urc"  [
+     set vy velocity-verlet-velocity vy fy new-fy - (f-app-vert / 100)
+     set fy new-fy - (f-app-vert / 100)
+   ]
+   posi = "llc" or posi = "lrc"  [
+     set vy velocity-verlet-velocity vy fy new-fy + (f-app-vert / 100)
+     set fy new-fy + (f-app-vert / 100)
+   ]
+   [
+    set vy velocity-verlet-velocity vy fy new-fy
+    set fy new-fy
+   ])
 end
 
 to-report calc-force [ r ]
@@ -251,7 +265,13 @@ to-report calc-force [ r ]
 end
 
 to update-color
-  set-color calc-V
+  let new-V 0
+  ask other particles in-radius cutoff-dist [
+    let r distance myself
+    let V (LJ-potential r )
+    set new-V new-V + V
+  ]
+  set-color new-V
 end
 
 to move  ; particle procedure
@@ -271,6 +291,18 @@ to move-tension
   set ycor velocity-verlet-pos ycor vy fy
 end
 
+to control-temp
+  let current-v-avg (sum [abs vx + abs vy] of turtles )/ num-atoms
+  let kb-over-m (1 / 10)
+  let target-v-avg kb-over-m * sqrt init-temp
+  if current-v-avg != 0 [
+    ask particles [
+      set vx vx * (target-v-avg / current-v-avg)
+      set vy vy * (target-v-avg / current-v-avg)
+    ]
+  ]
+end
+
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
   report pos + v * time-step + (1 / 2) * a * (time-step ^ 2)
 end
@@ -280,26 +312,11 @@ to-report velocity-verlet-velocity [v a new-a]  ; position and velocity
 end
 
 to set-color [v]
-  set color scale-color blue v -10 0
+  set color scale-color blue (v * 15) -10 0
 end
 
-to-report calc-V
-  let V 0
-  let Vi 0
-  let repel-term 0
-  let attract-term 0
-  let rsquare 0
-  ask other turtles in-radius CUTOFF-DIST [
-    ;set rsquare (xcor - [xcor] of myself) ^ 2 + (ycor - [ycor] of myself) ^ 2
-    set rsquare (distance myself) ^ 2
-    let dsquare DIAMETER * DIAMETER
-    set attract-term (dsquare * dsquare * dsquare)  / (rsquare * rsquare * rsquare)
-    set repel-term attract-term * attract-term
-    ;NOTE could do this a little faster by attract-term * (attract-term -1)
-    set Vi 4 * EPS * (repel-term - attract-term) + (- (4 * ((DIAMETER / CUTOFF-DIST) ^ 12 - (DIAMETER / CUTOFF-DIST) ^ 6)) )
-    set V V + Vi
-  ]
-  report V
+to-report LJ-potential [r]
+  report 4 * eps * ((sigma / r) ^ 12 - (sigma / r) ^ 6)
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -393,29 +410,11 @@ init-temp
 init-temp
 0
 3
-1.5
+0.3
 .1
 1
 NIL
 HORIZONTAL
-
-PLOT
-6
-359
-189
-509
-Kinetic Energy Histogram
-NIL
-NIL
-0.0
-0.1
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 0.01 1 -16777216 true "" "histogram [0.5 * (abs vx + abs vy) ^ 2] of turtles"
 
 SLIDER
 12
@@ -425,8 +424,8 @@ SLIDER
 f-app
 f-app
 0
-.5
-0.188
+.75
+0.481
 .001
 1
 NIL
@@ -437,15 +436,26 @@ SLIDER
 95
 184
 128
-f-app-top
-f-app-top
+f-app-vert
+f-app-vert
 0
 .5
-0.11
+0.14
 .01
 1
 NIL
 HORIZONTAL
+
+MONITOR
+19
+364
+94
+409
+T-avg-prop
+(sum [ (abs vx + abs vy) ^ 2] of turtles )/ num-atoms
+6
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
