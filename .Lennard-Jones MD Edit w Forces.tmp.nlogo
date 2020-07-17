@@ -9,9 +9,8 @@ particles-own [
   prev-y
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
-  force-act ; 0 = no force, 1 = force going left, 2 = don't move
-  top-force ; 0 = no , 1 = yes
-  tension ; 0 = no, 1 = yes left, 2 = yes right
+  posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
+           ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
 ]
 
 globals [
@@ -29,16 +28,17 @@ globals [
 
 to setup
   clear-all
-  set-default-shape turtles "circle"
+  ; set-default-shape turtles "circle" ;; nix?
   set num-atoms 100
   set diameter .9
   set r-min 1
   set eps 1
+  set sigma .90
   set cutoff-dist 5 * r-min
   setup-atoms
   init-velocity
   ;;create-disloc
-  ;tension-init
+  ;;tension-init
   reset-timer
   reset-ticks
 end
@@ -50,69 +50,81 @@ to setup-atoms
     set size diameter
     set color blue
   ]
-
-  if initial-config = "HCP" [
-    let l sqrt(num-atoms) ;the # of atoms in a row
+    let len sqrt(num-atoms) ;the # of atoms in a row ; l formerly
     let x-dist r-min
-    let new-x-dist 1
     let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2)
-    let ypos (- l * x-dist / 2) ;the y position of the first atom
-    let xpos (- l * x-dist / 2) ;the x position of the first atom
+    let ypos (- len * x-dist / 2) ;the y position of the first atom
+    let xpos (- len * x-dist / 2) ;the x position of the first atom
     let r-num 0  ;the row number
-    let atom-num 1
+    let atom-num 1 ;the atom number in the row
     ask turtles [  ;set the atoms; positions
       ( ifelse atom-num > 10 and r-num < 4  [  ;condition to start a new row
           set r-num r-num + 1
-          set xpos (- l * x-dist / 2) + (r-num mod 2) * x-dist / 2
+          set xpos (- len * x-dist / 2) + (r-num mod 2) * x-dist / 2
           set ypos ypos + y-dist
           set atom-num 1
-          set force-act 2
+          set posi "ll"
         ]
         atom-num > 10 [
           set r-num r-num + 1
-          set xpos (- l * new-x-dist / 2) + (r-num mod 2) * new-x-dist / 2
+          set xpos (- len * x-dist / 2) + (r-num mod 2) * x-dist / 2
           set ypos ypos + y-dist
           set atom-num 1
-          set force-act 1
-          if r-num = 9 [
-             set top-force 1
+          ifelse r-num = 10 [
+             set posi "ulc"
+           ]
+           [
+             set posi "ul"
            ]
         ]
       )
-      (ifelse r-num < 5 [
+
+      (ifelse r-num < 4 [
          setxy xpos ypos  ;if we are still in the same row
          set xpos xpos + x-dist
-         (ifelse atom-num = 10 [
-           set force-act 2
-           set tension 2
+
+         (ifelse r-num = 0 and 3 < atom-num and atom-num < 8 [
+           set posi "b"
          ]
-          atom-num = 1 [
-            set force-act 2
-            set tension 1
-          ])
-           set atom-num atom-num + 1
+          r-num = 0 and atom-num < 4 [
+            set posi "llc"
          ]
-       [
+          r-num = 0 and atom-num > 7 [
+            set posi "lrc"
+         ]
+          r-num != 0 and atom-num = 10 [
+            set posi "lr"
+         ]
+          atom-num != 1 [
+            set posi "body"
+         ]
+         )
+         set atom-num atom-num + 1
+       ]
+       [ ;; if r-num >= 4
         setxy xpos ypos  ;if we are still in the same row
-        set xpos xpos + new-x-dist ;; + .01 * atom-num
-        if atom-num = 10 [
-            set tension 2
-           ]
-        if r-num = 9 and atom-num != 10 [
-             set top-force 1
-           ]
-        set atom-num atom-num + 1
-      ])
-    ]
-  ]
+        set xpos xpos + x-dist
 
-  if initial-config = "Random" [
-    ask particles [
-      setxy random-xcor random-ycor
-    ]
-    remove-overlap ;make sure atoms aren't overlapping
-  ]
-
+        (ifelse r-num = 9 and 3 < atom-num and atom-num < 8 [
+          set posi "t"
+        ]
+         r-num = 9 and atom-num < 4 [
+           set posi "ulc"
+        ]
+         r-num = 9 and atom-num > 7 [
+           set posi "urc"
+        ]
+         r-num != 9 and atom-num = 10 [
+           set posi "ur"
+        ]
+        atom-num != 1 [
+           set posi "body"
+        ]
+        )
+         set atom-num atom-num + 1
+       ]
+      )
+     ]
   ask particles [
     set prev-x xcor
     set prev-y ycor
@@ -128,6 +140,10 @@ to init-velocity
     set vy v-avg * (1 - x-y-split) * positive-or-negative]
 end
 
+to-report positive-or-negative
+  report ifelse-value random 2 = 0 [-1] [1]
+end
+
 to create-disloc
   ask turtles-on patches with [pxcor = 0 and pycor = -1 ] [ die ]
   ask turtles-on patches with [pxcor = -1 and pycor = 0 ] [ die ]
@@ -136,38 +152,10 @@ to create-disloc
   ask turtles-on patches with [pxcor = -2 and pycor = 3 ] [ die ]
 end
 
-to tension-init
+to tension-init ;; maybe not necessary
   ask turtles-on patches with [pxcor = 5 and pycor = 3] [die]
   ask turtles-on patches with [pxcor = -5 and pycor = -5] [die]
 end
-
-to-report random-1d-bolztman
-  ; To get the random number, pick a random number y between 0 and 1 uniformly
-  ; Then pick x such that CDF(x) = y.
-  ; The CDF for the 1d boltzman's distribution is approximately y = 1 - exp(-x^2 / 3)
-  ; Solving for x gives x = sqrt( -3 * ln(1 - y))
-  ; TODO - figure out what the scale parameter should be (based on wikipedia, should be a (a^2) in the denominator of the xponenet: https://en.wikipedia.org/wiki/Maxwell–Boltzmann_distribution
-  let y random-float 1
-  report sqrt( -3 * ln(1 - y))
-end
-
-to-report positive-or-negative
-  report ifelse-value random 2 = 0 [-1] [1]
-end
-
-
-to remove-overlap
-  ask particles [
-    while [overlapping] [
-      setxy random-xcor random-ycor
-    ]
-  ]
-end
-
-to-report overlapping
-  report any? other turtles in-radius r-min
-end
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Runtime Procedures ;;
@@ -178,17 +166,28 @@ to go
 ;    set vx vx * .5
 ;    set vy vy * .5
 ;  ]
-  ask particles [
-    ;;update-force-and-velocity
-    update-force-and-velocity-tension
+  (ifelse force-mode = "Shear" [
+    ask particles [
+      update-force-and-velocity
+    ]
+    ask particles [
+      update-color
+    ]
+    ask particles [
+      move
+    ]
   ]
-  ;; ask particles [
-    ;;update-color
-  ;;]
-  ask particles [
-    ;;move
-    move-tension
-  ]
+  force-mode = "Tension" [
+    ask particles [
+      update-force-and-velocity-tension
+    ]
+    ask particles [
+      update-color
+    ]
+    ask particles [
+      move-tension
+    ]
+  ])
   tick-advance time-step
   update-plots
 end
@@ -200,28 +199,25 @@ to update-force-and-velocity  ; particle procedure
     let r distance myself
     let force calc-force r
     face myself
-    rt 180
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)]
 
-  (ifelse force-act = 1 [
+  (ifelse posi = "ul" [
     set vx velocity-verlet-velocity vx fx (new-fx + f-app)
     set fx new-fx + f-app
-    set heading 270
    ]
    [
     set vx velocity-verlet-velocity vx fx new-fx
     set fx new-fx
    ])
-   ifelse top-force = 1  [
+   (ifelse posi = "ulc" or posi = "t" or posi = "urc"  [
      set vy velocity-verlet-velocity vy fy new-fy - (f-app-top / 100)
      set fy new-fy - (f-app-top / 100)
-     set heading 180
    ]
    [
     set vy velocity-verlet-velocity vy fy new-fy
     set fy new-fy
-   ]
+   ])
 end
 
 to update-force-and-velocity-tension
@@ -231,20 +227,18 @@ to update-force-and-velocity-tension
     let r distance myself
     let force calc-force r
     face myself
-    rt 180
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)]
-   (ifelse force-act = 1 or tension = 1 [
+
+  (ifelse posi = "ul" or posi = "ll" [
     set vx velocity-verlet-velocity vx fx (new-fx - f-app)
     set fx new-fx - f-app
-    set heading 270
-   ]
-    tension = 2 [
+  ]
+  posi = "ur" or posi = "lr" [
     set vx velocity-verlet-velocity vx fx (new-fx + f-app)
     set fx new-fx + f-app
-    set heading 90
-    ]
-   [
+  ]
+  [
     set vx velocity-verlet-velocity vx fx new-fx
     set fx new-fx
   ])
@@ -253,7 +247,7 @@ to update-force-and-velocity-tension
 end
 
 to-report calc-force [ r ]
-  report (- eps / (r ^ 7)) * ((r ^ -6) - 1)
+  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 
 to update-color
@@ -262,7 +256,7 @@ end
 
 to move  ; particle procedure
   ;; Uses velocity-verlet algorithm
-  if force-act != 2 [
+  if posi != "ll" and posi != "lr" [
     set prev-x xcor
     set prev-y ycor
     set xcor velocity-verlet-pos xcor vx fx
@@ -374,9 +368,9 @@ CHOOSER
 38
 148
 83
-initial-config
-initial-config
-"HCP" "Random"
+force-mode
+force-mode
+"Shear" "Tension"
 0
 
 INPUTBOX
@@ -447,7 +441,7 @@ f-app-top
 f-app-top
 0
 .5
-0.0
+0.11
 .01
 1
 NIL
