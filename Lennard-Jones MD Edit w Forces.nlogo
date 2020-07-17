@@ -410,7 +410,7 @@ init-temp
 init-temp
 0
 3
-1.5
+0.3
 .1
 1
 NIL
@@ -424,8 +424,8 @@ SLIDER
 f-app
 f-app
 0
-.5
-0.0
+.75
+0.75
 .001
 1
 NIL
@@ -440,7 +440,7 @@ f-app-vert
 f-app-vert
 0
 .5
-0.0
+0.14
 .01
 1
 NIL
