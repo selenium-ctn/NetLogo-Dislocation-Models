@@ -38,7 +38,7 @@ to setup
   setup-atoms
   init-velocity
   ;;create-disloc
-  tension-init
+  ;tension-init
   reset-timer
   reset-ticks
 end
@@ -174,13 +174,17 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+;  ask particles [
+;    set vx vx * .5
+;    set vy vy * .5
+;  ]
   ask particles [
     ;;update-force-and-velocity
     update-force-and-velocity-tension
   ]
- ;; ask particles [
-   ; update-color
-  ;]
+  ;; ask particles [
+    ;;update-color
+  ;;]
   ask particles [
     ;;move
     move-tension
@@ -318,7 +322,7 @@ GRAPHICS-WINDOW
 1
 1
 0
-0
+1
 1
 1
 -10
@@ -428,7 +432,7 @@ f-app
 f-app
 0
 .5
-0.191
+0.188
 .001
 1
 NIL
