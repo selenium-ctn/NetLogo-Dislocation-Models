@@ -1,11 +1,11 @@
-extensions [stats]
+;;extensions [stats]
 
 breed [particles particle]
 
 particles-own [
   fx     ; x-component of force vector
   fy     ; y-component of force vector
-  prev-x
+  prev-x ; possibly switch to regular verlet - faster, lower error
   prev-y
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
@@ -39,7 +39,7 @@ to setup
   init-velocity
   if force-mode = "Shear" [
     create-disloc
-  ]
+  ] ;; switch on whether to create disloc
   ;;tension-init
   reset-timer
   reset-ticks
@@ -67,7 +67,7 @@ to setup-atoms
           set atom-num 1
           set posi "ll"
         ]
-        atom-num > 10 [
+        atom-num > 10 [ ;; can combine into one
           set r-num r-num + 1
           set xpos (- len * x-dist / 2) + (r-num mod 2) * x-dist / 2
           set ypos ypos + y-dist
@@ -81,7 +81,7 @@ to setup-atoms
         ]
       )
 
-      (ifelse r-num < 5 [
+      (ifelse r-num < 5 [ ;; can combine
          setxy xpos ypos  ;if we are still in the same row
          set xpos xpos + x-dist
 
@@ -175,19 +175,15 @@ to go
     ]
     ask particles [
       update-color
-    ]
-    ask particles [
       move
     ]
   ]
   force-mode = "Tension" [
     ask particles [
-      update-force-and-velocity-tension
+      update-force-and-velocity-tension ; change force modes to within functions
     ]
-;    ask particles [
-;      update-color
-;    ]
     ask particles [
+      update-color
       move-tension
     ]
   ])
@@ -425,7 +421,7 @@ f-app
 f-app
 0
 .75
-0.75
+0.0
 .001
 1
 NIL
@@ -440,7 +436,7 @@ f-app-vert
 f-app-vert
 0
 .5
-0.14
+0.0
 .01
 1
 NIL
