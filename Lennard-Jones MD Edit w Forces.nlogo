@@ -55,7 +55,7 @@ to setup-atoms
     let xpos (- len * x-dist / 2) ;the x position of the first atom
     let rnum 0
     ask turtles [
-      if xpos > (len * x-dist / 2)  [
+      if xpos > (len * x-dist / 2 + x-dist / 2)  [
         set rnum rnum + 1
         set xpos (- len * x-dist / 2) + (rnum mod 2) * x-dist / 2
         set ypos ypos + y-dist
@@ -105,8 +105,8 @@ to setup-atoms
   ]
 
   if create-dislocation? [
-    let curr-y-cor round (( ymax + ymin ) / 2)
-    let curr-x-cor round (( xmax + xmin ) / 2)
+    let curr-y-cor ceiling (( ymax + ymin ) / 2)
+    let curr-x-cor ceiling (( xmax + xmin ) / 2)
     let iter-num 1
     while [ curr-y-cor <= ceiling (ymax) ] [
       ask turtles with [xcor <= curr-x-cor + diameter / 2
@@ -249,10 +249,6 @@ end
 to set-color [v]
   set color scale-color blue (v * 15) -10 0
 end
-
-to-report LJ-potential [r]
-  report 4 * eps * ((sigma / r) ^ 12 - (sigma / r) ^ 6)
-end
 @#$#@#$#@
 GRAPHICS-WINDOW
 192
@@ -282,10 +278,10 @@ ticks
 30.0
 
 BUTTON
-7
-259
-93
-292
+8
+274
+94
+307
 NIL
 setup
 NIL
@@ -299,10 +295,10 @@ NIL
 1
 
 BUTTON
-102
-259
-188
-292
+104
+274
+189
+307
 NIL
 go
 T
@@ -316,20 +312,20 @@ NIL
 0
 
 CHOOSER
-10
-38
-148
-83
+25
+13
+163
+58
 force-mode
 force-mode
 "Shear" "Tension"
 0
 
 SLIDER
-10
-129
-182
-162
+12
+146
+184
+179
 system-temp
 system-temp
 0
@@ -341,10 +337,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-11
-168
-183
-201
+12
+189
+184
+222
 f-app
 f-app
 0
@@ -357,9 +353,9 @@ HORIZONTAL
 
 SLIDER
 12
-95
+232
 184
-128
+265
 f-app-vert
 f-app-vert
 0
@@ -371,10 +367,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-61
-310
-136
-355
+58
+414
+133
+459
 T-avg-prop
 mean [sqrt (vx ^ 2 + vy ^ 2)] of turtles
 6
@@ -382,10 +378,10 @@ mean [sqrt (vx ^ 2 + vy ^ 2)] of turtles
 11
 
 SWITCH
-18
-215
-177
-248
+16
+65
+175
+98
 create-dislocation?
 create-dislocation?
 0
@@ -393,10 +389,10 @@ create-dislocation?
 -1000
 
 SWITCH
-25
-372
-157
-405
+32
+320
+164
+353
 temp-control?
 temp-control?
 0
@@ -404,25 +400,25 @@ temp-control?
 -1000
 
 SLIDER
-16
-431
-188
-464
+11
+106
+183
+139
 num-atoms
 num-atoms
 0
 200
-55.0
+148.0
 1
 1
 NIL
 HORIZONTAL
 
 SWITCH
-19
-482
-151
-515
+32
+366
+164
+399
 update-color?
 update-color?
 1
