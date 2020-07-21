@@ -1,5 +1,3 @@
-;;extensions [stats]
-
 breed [particles particle]
 
 particles-own [
@@ -11,8 +9,7 @@ particles-own [
   vy     ; y-component of velocity vector
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
-  adj-x-force
-  adj-y-force
+  mass
 ]
 
 globals [
@@ -21,9 +18,8 @@ globals [
   eps
   sigma
   cutoff-dist
-  num-atoms
   time-step
-  sqrt-kb-over-m
+  sqrt-kb-over-m  ;hmm should probably change if mass is changed
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -32,118 +28,25 @@ globals [
 
 to setup
   clear-all
-  ; set-default-shape turtles "circle" ;; nix?
-  set num-atoms 70 ;100
   set diameter .9
   set r-min 1
   set eps .07
   set sigma .907
   set cutoff-dist 5 * r-min
   set time-step .02
-  set sqrt-kb-over-m (1 / 10)
+  set sqrt-kb-over-m (1 / 25)
   setup-atoms
   init-velocity
-  if create-dislocation? [
-    create-disloc
-  ] ;; switch on whether to create disloc
-  ;;tension-init
   reset-timer
   reset-ticks
 end
-
-
-;to setup-atoms
-;  create-particles num-atoms [
-;    set shape "circle"
-;    set size diameter
-;    set color blue
-;  ]
-;    let len sqrt(num-atoms) ;the # of atoms in a row ; l formerly
-;    let x-dist r-min
-;    let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2)
-;    let ypos (- len * x-dist / 2) ;the y position of the first atom
-;    let xpos (- len * x-dist / 2) ;the x position of the first atom
-;    let r-num 0  ;the row number
-;    let atom-num 1 ;the atom number in the row
-;    ask turtles [  ;set the atoms; positions
-;      ( ifelse atom-num > 10 and r-num < 4  [  ;condition to start a new row
-;          set r-num r-num + 1
-;          set xpos (- len * x-dist / 2) + (r-num mod 2) * x-dist / 2
-;          set ypos ypos + y-dist
-;          set atom-num 1
-;          set posi "ll"
-;        ]
-;        atom-num > 10 [ ;; can combine into one
-;          set r-num r-num + 1
-;          set xpos (- len * x-dist / 2) + (r-num mod 2) * x-dist / 2
-;          set ypos ypos + y-dist
-;          set atom-num 1
-;          ifelse r-num = 10 [
-;             set posi "ulc"
-;           ]
-;           [
-;             set posi "ul"
-;           ]
-;        ]
-;      )
-;
-;      (ifelse r-num < 5 [ ;; can combine
-;         setxy xpos ypos  ;if we are still in the same row
-;         set xpos xpos + x-dist
-;
-;         (ifelse r-num = 0 and 3 < atom-num and atom-num < 8 [
-;           set posi "b"
-;         ]
-;          r-num = 0 and atom-num < 4 [
-;            set posi "llc"
-;         ]
-;          r-num = 0 and atom-num > 7 [
-;            set posi "lrc"
-;         ]
-;          r-num != 0 and atom-num = 10 [
-;            set posi "lr"
-;         ]
-;          atom-num != 1 [
-;            set posi "body"
-;         ]
-;         )
-;         set atom-num atom-num + 1
-;       ]
-;       [ ;; if r-num >= 4
-;        setxy xpos ypos  ;if we are still in the same row
-;        set xpos xpos + x-dist
-;
-;        (ifelse r-num = 9 and 3 < atom-num and atom-num < 8 [
-;          set posi "t"
-;        ]
-;         r-num = 9 and atom-num < 4 [
-;           set posi "ulc"
-;        ]
-;         r-num = 9 and atom-num > 7 [
-;           set posi "urc"
-;        ]
-;         r-num != 9 and atom-num = 10 [
-;           set posi "ur"
-;        ]
-;        atom-num != 1 [
-;           set posi "body"
-;        ]
-;        )
-;         set atom-num atom-num + 1
-;       ]
-;      )
-;     ]
-;  ask particles [
-;    set prev-x xcor
-;    set prev-y ycor
-;  ]
-;end
 
 to setup-atoms
   create-particles num-atoms [
     set shape "circle"
     set size diameter
     set color blue
+    set mass 1
   ]
     let len sqrt(num-atoms) ;the # of atoms in a row ; l formerly
     let x-dist r-min
@@ -191,7 +94,7 @@ to setup-atoms
     xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < floor (( ymax + ymin ) / 2) [
       set posi "ll"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= floor (( ymax + ymin ) / 2)  [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= floor (( ymax + ymin ) / 2) [
       set posi "ur"
     ]
     xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < floor (( ymax + ymin ) / 2) [
@@ -200,11 +103,25 @@ to setup-atoms
     [set posi "body"]
     )
   ]
+
+  if create-dislocation? [
+    let curr-y-cor round (( ymax + ymin ) / 2)
+    let curr-x-cor round (( xmax + xmin ) / 2)
+    let iter-num 1
+    while [ curr-y-cor <= ceiling (ymax) ] [
+      ask turtles with [xcor <= curr-x-cor + diameter / 2
+        and xcor >= curr-x-cor - diameter / 2
+        and ycor <= curr-y-cor + diameter / 2
+        and ycor >= curr-y-cor - diameter / 2  ] [ die ]
+      set curr-y-cor curr-y-cor + y-dist
+      set curr-x-cor curr-x-cor - x-dist / 2
+      set iter-num iter-num + 1
+    ]
+  ]
 end
 
-
 to init-velocity
-  let v-avg sqrt-kb-over-m * sqrt init-temp
+  let v-avg sqrt-kb-over-m * sqrt system-temp
   ask particles [
     let x-y-split random-float 1
     set vx v-avg * x-y-split * positive-or-negative
@@ -213,19 +130,6 @@ end
 
 to-report positive-or-negative
   report ifelse-value random 2 = 0 [-1] [1]
-end
-
-to create-disloc
-  ask turtles-on patches with [pxcor = 0 and pycor = -1 ] [ die ]
-  ask turtles-on patches with [pxcor = -1 and pycor = 0 ] [ die ]
-  ask turtles-on patches with [pxcor = -1 and pycor = 1 ] [ die ]
-  ask turtles-on patches with [pxcor = -2 and pycor = 2 ] [ die ]
-  ask turtles-on patches with [pxcor = -2 and pycor = 3 ] [ die ]
-end
-
-to tension-init ;; maybe not necessary
-  ask turtles-on patches with [pxcor = 5 and pycor = 3] [die]
-  ask turtles-on patches with [pxcor = -5 and pycor = -5] [die]
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,7 +144,6 @@ to go
     update-force-and-velocity
   ]
   ask particles [
-    update-color
     move
   ]
   tick-advance time-step
@@ -257,29 +160,29 @@ to update-force-and-velocity  ; particle procedure
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)]
 
-  set adj-x-force new-fx
-  set adj-y-force new-fy
-
   (ifelse force-mode = "Shear" [
-    ask particles with [posi = "ul"] [
-      set adj-x-force report-new-force posi new-fx
-    ]
-    ask particles with [posi = "ulc" or posi = "t" or posi = "urc"] [
-      set adj-y-force report-new-force posi new-fy
-    ]
- ]
+      (ifelse posi = "ul" [
+        set new-fx report-new-force posi new-fx
+      ]
+      posi = "ulc" or posi = "t" or posi = "urc" [
+        set new-fy report-new-force posi new-fy
+      ])
+   ]
   force-mode = "Tension" [
-      ask particles with [posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr"] [
-        set adj-x-force report-new-force posi new-fx
+      (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
+        set new-fx report-new-force posi new-fx
       ]
-      ask particles with [posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc"] [
-        set adj-y-force report-new-force posi new-fy
-      ]
-  ])
-    set vx velocity-verlet-velocity vx fx adj-x-force
-    set vy velocity-verlet-velocity vy fy adj-y-force
-    set fx adj-x-force
-    set fy adj-y-force
+      posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
+        set new-fy report-new-force posi new-fy
+      ])
+   ])
+   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+   set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+   set fx new-fx
+   set fy new-fy
+   if update-color? [
+     set-color sqrt ( new-fx ^ 2 + new-fy ^ 2)
+  ]
 end
 
 to-report report-new-force [ pos f-gen ]
@@ -311,18 +214,7 @@ to-report LJ-force [ r ]
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 
-to update-color
-  let new-V 0
-  ask other particles in-radius cutoff-dist [
-    let r distance myself
-    let V (LJ-potential r )
-    set new-V new-V + V
-  ]
-  set-color new-V
-end
-
-to move  ; particle procedure
-  ;; Uses velocity-verlet algorithm
+to move  ; particle procedure, uses velocity-verlet algorithm
   ifelse force-mode = "Shear" [
     if posi != "ll" and posi != "lr" [
       set xcor velocity-verlet-pos xcor vx fx
@@ -336,8 +228,8 @@ to move  ; particle procedure
 end
 
 to control-temp
-  let current-v-avg (sum [abs vx + abs vy] of turtles )/ num-particles\
-  let target-v-avg sqrt-kb-over-m * sqrt init-temp
+  let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of turtles
+  let target-v-avg sqrt-kb-over-m * sqrt
   if current-v-avg != 0 [
     ask particles [
       set vx vx * (target-v-avg / current-v-avg)
@@ -438,12 +330,12 @@ SLIDER
 129
 182
 162
-init-temp
-init-temp
+system-temp
+system-temp
 0
-3
-0.3
-.1
+1
+0.34
+.01
 1
 NIL
 HORIZONTAL
@@ -457,7 +349,7 @@ f-app
 f-app
 0
 .75
-0.401
+0.0
 .001
 1
 NIL
@@ -472,7 +364,7 @@ f-app-vert
 f-app-vert
 0
 .5
-0.32
+0.0
 .01
 1
 NIL
@@ -484,7 +376,7 @@ MONITOR
 136
 355
 T-avg-prop
-(sum [ (abs vx + abs vy) ^ 2] of turtles )/ num-atoms
+mean [sqrt (vx ^ 2 + vy ^ 2)] of turtles
 6
 1
 11
@@ -507,6 +399,32 @@ SWITCH
 405
 temp-control?
 temp-control?
+0
+1
+-1000
+
+SLIDER
+16
+431
+188
+464
+num-atoms
+num-atoms
+0
+200
+55.0
+1
+1
+NIL
+HORIZONTAL
+
+SWITCH
+19
+482
+151
+515
+update-color?
+update-color?
 1
 1
 -1000
