@@ -10,6 +10,7 @@ particles-own [
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
+  part-dist
 ]
 
 globals [
@@ -30,11 +31,11 @@ to setup
   clear-all
   set diameter .9
   set r-min 1
-  set eps .07
+  set eps .05 ;; .07
   set sigma .907
   set cutoff-dist 5 * r-min
   set time-step .02
-  set sqrt-kb-over-m (1 / 25)
+  set sqrt-kb-over-m (1 / 20)
   setup-atoms
   init-velocity
   reset-timer
@@ -109,9 +110,9 @@ to setup-atoms
     let curr-x-cor median [xcor] of turtles
     let iter-num 1
     while [ curr-y-cor <= ceiling (ymax) ] [
-      ask turtles with [xcor <= curr-x-cor + x-dist /
+      ask turtles with [xcor <= curr-x-cor + x-dist * .75
         and xcor >= curr-x-cor
-        and ycor <= curr-y-cor + y-dist / 2
+        and ycor <= curr-y-cor + y-dist * .75
         and ycor >= curr-y-cor ] [ die ]
       set curr-y-cor curr-y-cor + y-dist
       set curr-x-cor curr-x-cor - x-dist / 2
@@ -119,12 +120,6 @@ to setup-atoms
     ]
   ]
 end
-
-;while [ curr-y-cor <= ceiling (ymax) ] [
-;      ask turtles with [xcor <= curr-x-cor + x-dist / 2
-;        and xcor >= curr-x-cor - x-dist / 2
-;        and ycor <= curr-y-cor + x-dist / 2
-;        and ycor >= curr-y-cor - x-dist / 2  ] [ die ]
 
 to init-velocity
   let v-avg sqrt-kb-over-m * sqrt system-temp
@@ -152,6 +147,7 @@ to go
   ask particles [
     move
   ]
+  ;find-disloc
   tick-advance time-step
   update-plots
 end
@@ -159,9 +155,12 @@ end
 to update-force-and-velocity  ; particle procedure
   let new-fx 0
   let new-fy 0
+  let total-force 0
   ask other particles in-radius cutoff-dist [
     let r distance myself
     let force LJ-force r
+    ;set total-force total-force + force
+    set total-force total-force + abs(force)
     face myself
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)]
@@ -187,7 +186,7 @@ to update-force-and-velocity  ; particle procedure
    set fx new-fx
    set fy new-fy
    if update-color? [
-     set-color sqrt ( new-fx ^ 2 + new-fy ^ 2)
+     set-color total-force
   ]
 end
 
@@ -244,6 +243,20 @@ to control-temp
   ]
 end
 
+;to find-disloc
+;  ask particles [
+;    set part-dist 0
+;    let part-count 0
+;    ask other particles in-radius (2 * diameter) [
+;      set part-dist part-dist + distance myself
+;      set part-count part-count + 1
+;    ]
+;    set part-dist part-dist / part-count
+;  ]
+;  ask particles [set color blue]
+;  ask particles with-min [ part-dist ] [ set color red ]
+;end
+
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
   report pos + v * time-step + (1 / 2) * a * (time-step ^ 2)
 end
@@ -253,7 +266,8 @@ to-report velocity-verlet-velocity [v a new-a]  ; position and velocity
 end
 
 to set-color [v]
-  set color scale-color blue (v * 15) -10 0
+  ;set color scale-color blue (v * 10) -10 10
+  set color scale-color blue (v * 2) -15 15
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -336,7 +350,7 @@ system-temp
 system-temp
 0
 1
-0.34
+0.31
 .01
 1
 NIL
@@ -351,7 +365,7 @@ f-app
 f-app
 0
 .75
-0.0
+0.076
 .001
 1
 NIL
@@ -414,7 +428,7 @@ num-atoms-per-row
 num-atoms-per-row
 1
 20
-15.0
+11.0
 1
 1
 NIL
@@ -427,7 +441,7 @@ SWITCH
 399
 update-color?
 update-color?
-1
+0
 1
 -1000
 
