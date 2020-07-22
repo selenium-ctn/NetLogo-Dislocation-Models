@@ -42,13 +42,13 @@ to setup
 end
 
 to setup-atoms
-  create-particles num-atoms [
+  create-particles num-atoms-per-row ^ 2 [
     set shape "circle"
     set size diameter
     set color blue
     set mass 1
   ]
-    let len round(sqrt(num-atoms)) ;the # of atoms in a row ; l formerly
+    let len num-atoms-per-row ;the # of atoms in a row ; l formerly
     let x-dist r-min
     let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2)
     let ypos (- len * x-dist / 2) ;the y position of the first atom
@@ -104,39 +104,26 @@ to setup-atoms
     )
   ]
 
-  let position-adjust num-atoms mod len
-  let move-back 0
-  while [ position-adjust != 0 ] [
-    ask turtles with [(ycor = ymax - y-dist)
-      and (xcor = xmax - move-back * x-dist or xcor = xmax - 1 / 2 - move-back * x-dist)] [
-      (ifelse xcor >= xmin and xcor <= xmin + floor (len / 4 ) [
-        set posi "ulc"
-      ]
-      xcor >= xmin + floor (len / 4 ) and xcor < xmax - floor (len / 4 ) [
-        set posi "t"
-      ]
-      [
-        set posi "urc"
-      ])
-    ]
-    set move-back move-back - 1
-  ]
-
   if create-dislocation? [
-    let curr-y-cor ceiling (( ymax + ymin ) / 2)
-    let curr-x-cor ceiling (( xmax + xmin ) / 2)
+    let curr-y-cor median [ycor] of turtles
+    let curr-x-cor median [xcor] of turtles
+    ; needs to work for even #s also
     let iter-num 1
     while [ curr-y-cor <= ceiling (ymax) ] [
-      ask turtles with [xcor <= curr-x-cor + diameter / 2
-        and xcor >= curr-x-cor - diameter / 2
-        and ycor <= curr-y-cor + diameter / 2
-        and ycor >= curr-y-cor - diameter / 2  ] [ die ]
+      ask turtles with [xcor = curr-x-cor
+        and ycor = curr-y-cor ] [ die ]
       set curr-y-cor curr-y-cor + y-dist
       set curr-x-cor curr-x-cor - x-dist / 2
       set iter-num iter-num + 1
     ]
   ]
 end
+
+;while [ curr-y-cor <= ceiling (ymax) ] [
+;      ask turtles with [xcor <= curr-x-cor + x-dist / 2
+;        and xcor >= curr-x-cor - x-dist / 2
+;        and ycor <= curr-y-cor + x-dist / 2
+;        and ycor >= curr-y-cor - x-dist / 2  ] [ die ]
 
 to init-velocity
   let v-avg sqrt-kb-over-m * sqrt system-temp
@@ -422,11 +409,11 @@ SLIDER
 106
 183
 139
-num-atoms
-num-atoms
-0
-200
-99.0
+num-atoms-per-row
+num-atoms-per-row
+1
+20
+10.0
 1
 1
 NIL
