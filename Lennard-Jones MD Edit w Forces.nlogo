@@ -48,14 +48,14 @@ to setup-atoms
     set color blue
     set mass 1
   ]
-    let len sqrt(num-atoms) ;the # of atoms in a row ; l formerly
+    let len round(sqrt(num-atoms)) ;the # of atoms in a row ; l formerly
     let x-dist r-min
     let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2)
     let ypos (- len * x-dist / 2) ;the y position of the first atom
     let xpos (- len * x-dist / 2) ;the x position of the first atom
     let rnum 0
     ask turtles [
-      if xpos > (len * x-dist / 2 + x-dist / 2)  [
+      if xpos >= (len * x-dist / 2)  [
         set rnum rnum + 1
         set xpos (- len * x-dist / 2) + (rnum mod 2) * x-dist / 2
         set ypos ypos + y-dist
@@ -80,7 +80,7 @@ to setup-atoms
       set posi "lrc"
     ]
     ycor = ymax and xcor >= xmin and xcor <= xmin + floor (len / 4 ) [
-      set posi "urc"
+      set posi "ulc"
     ]
     ycor = ymax and xcor >= xmin + floor (len / 4 ) and xcor < xmax - floor (len / 4 ) [
       set posi "t"
@@ -102,6 +102,24 @@ to setup-atoms
     ]
     [set posi "body"]
     )
+  ]
+
+  let position-adjust num-atoms mod len
+  let move-back 0
+  while [ position-adjust != 0 ] [
+    ask turtles with [(ycor = ymax - y-dist)
+      and (xcor = xmax - move-back * x-dist or xcor = xmax - 1 / 2 - move-back * x-dist)] [
+      (ifelse xcor >= xmin and xcor <= xmin + floor (len / 4 ) [
+        set posi "ulc"
+      ]
+      xcor >= xmin + floor (len / 4 ) and xcor < xmax - floor (len / 4 ) [
+        set posi "t"
+      ]
+      [
+        set posi "urc"
+      ])
+    ]
+    set move-back move-back - 1
   ]
 
   if create-dislocation? [
@@ -408,7 +426,7 @@ num-atoms
 num-atoms
 0
 200
-148.0
+99.0
 1
 1
 NIL

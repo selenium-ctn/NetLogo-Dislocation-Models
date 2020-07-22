@@ -27,8 +27,8 @@ to setup
   setup-atoms
   setup-bonds
   init-velocity
-  set eps .02 ;; *may change*
-  set sigma .90 ;; .8909 ;; *may change*
+  set eps 2 ;;.02 ;; *may change*
+  set sigma .90 ;; .90 ;; .8909 ;; *may change*
   set time-step 0.02 ;; *may change*
   set bonding-dist 2  * r0
   reset-ticks
@@ -104,6 +104,13 @@ to update-force-and-velocity
   ;; ask other atoms in-radius ( 2 * r0 ) [ ;; only calculate LJ force from turtles that a given turtle is neighbors with
     let r distance myself
     let force (LJ-force r )
+    face myself
+    set new-fx new-fx + (force * dx)
+    set new-fy new-fy + (force * dy)
+  ]
+  ask other atoms in-radius ( 1.5 * r0 ) with [not link-neighbor? myself] [
+    let r distance myself
+    let force (LJ-force r ) * .05
     face myself
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
@@ -253,7 +260,7 @@ init-temp
 init-temp
 0
 3.0
-2.3
+1.1
 .1
 1
 NIL
