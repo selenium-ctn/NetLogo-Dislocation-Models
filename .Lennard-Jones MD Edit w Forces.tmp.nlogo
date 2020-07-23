@@ -10,7 +10,7 @@ particles-own [
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
-  part-dist
+  disloc?
 ]
 
 globals [
@@ -21,6 +21,7 @@ globals [
   cutoff-dist
   time-step
   sqrt-kb-over-m  ;hmm should probably change if mass is changed
+  init-link-len-min
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -37,6 +38,7 @@ to setup
   set time-step .02
   set sqrt-kb-over-m (1 / 20)
   setup-atoms
+  setup-links
   init-velocity
   reset-timer
   reset-ticks
@@ -121,6 +123,25 @@ to setup-atoms
   ]
 end
 
+to setup-links
+  ask particles [
+    set heading 325
+    if any? turtles in-cone (2 * diameter) 15 [
+      create-links-with other turtles in-cone (2 * diameter) 15
+    ]
+  ]
+  set init-link-len-min ([link-length] of min-one-of links [link-length])
+  ask links [
+    set thickness .25
+    color-links link-length
+  ]
+  ask particles with [posi = "body"] [
+    if count link-neighbors < 2 [
+      set disloc? 1
+    ]
+  ]
+end
+
 to init-velocity
   let v-avg sqrt-kb-over-m * sqrt system-temp
   ask particles [
@@ -138,16 +159,14 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  if temp-control? [
-    control-temp
-  ]
+  control-temp
   ask particles [
     update-force-and-velocity
   ]
   ask particles [
     move
+    update-links
   ]
-  ;find-disloc
   tick-advance time-step
   update-plots
 end
@@ -159,7 +178,6 @@ to update-force-and-velocity  ; particle procedure
   ask other particles in-radius cutoff-dist [
     let r distance myself
     let force LJ-force r
-    ;set total-force total-force + force
     set total-force total-force + abs(force)
     face myself
     set new-fx new-fx + (force * dx)
@@ -186,7 +204,7 @@ to update-force-and-velocity  ; particle procedure
    set fx new-fx
    set fy new-fy
    if update-color? [
-     set-color total-force
+    set-color total-force
   ]
 end
 
@@ -243,19 +261,27 @@ to control-temp
   ]
 end
 
-;to find-disloc
-;  ask particles [
-;    set part-dist 0
-;    let part-count 0
-;    ask other particles in-radius (2 * diameter) [
-;      set part-dist part-dist + distance myself
-;      set part-count part-count + 1
-;    ]
-;    set part-dist part-dist / part-count
-;  ]
-;  ask particles [set color blue]
-;  ask particles with-min [ part-dist ] [ set color red ]
-;end
+to update-links
+  ask particles with [disloc? = 1] [
+    set heading 325
+    if any? other turtles in-cone (2 * diameter) 1 [
+      ask other turtles in-cone (2 * diameter) 10 [
+        set heading 180
+        ask link-with (one-of other turtles in-cone (2 * diameter) 50) [die] ]
+      create-links-with other turtles in-cone (2 * diameter) 10
+      ask links [ set thickness .25 ]
+      set disloc? 0
+      ask particles with [posi = "body"] [
+        if count link-neighbors < 2 [
+        set disloc? 1
+      ]
+     ]
+    ]
+  ]
+  ask links [
+    color-links link-length
+  ]
+end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
   report pos + v * time-step + (1 / 2) * a * (time-step ^ 2)
@@ -266,8 +292,14 @@ to-report velocity-verlet-velocity [v a new-a]  ; position and velocity
 end
 
 to set-color [v]
-  ;set color scale-color blue (v * 10) -10 10
-  set color scale-color blue (v * 2) -15 15
+  set color scale-color blue sqrt(v) -.3 1.4
+end
+
+to color-links [len]
+  (ifelse len < init-link-len-min [set color red]
+    len > 1.0180731 [set color green] ;; equilibrium bond length
+    [set color gray]
+    )
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -350,7 +382,7 @@ system-temp
 system-temp
 0
 1
-0.31
+0.23
 .01
 1
 NIL
@@ -365,7 +397,7 @@ f-app
 f-app
 0
 .75
-0.076
+0.062
 .001
 1
 NIL
@@ -380,17 +412,17 @@ f-app-vert
 f-app-vert
 0
 .5
-0.0
+0.04
 .01
 1
 NIL
 HORIZONTAL
 
 MONITOR
-58
-414
-133
-459
+60
+365
+135
+410
 T-avg-prop
 mean [sqrt (vx ^ 2 + vy ^ 2)] of turtles
 6
@@ -404,17 +436,6 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-0
-1
--1000
-
-SWITCH
-32
-320
-164
-353
-temp-control?
-temp-control?
 0
 1
 -1000
@@ -435,10 +456,10 @@ NIL
 HORIZONTAL
 
 SWITCH
-32
-366
-164
-399
+30
+322
+162
+355
 update-color?
 update-color?
 0
