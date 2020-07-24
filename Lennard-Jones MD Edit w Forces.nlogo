@@ -11,6 +11,7 @@ particles-own [
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
   disloc?
+  disloc-row?
 ]
 
 globals [
@@ -38,7 +39,9 @@ to setup
   set time-step .02
   set sqrt-kb-over-m (1 / 20)
   setup-atoms
-  setup-links
+  if lines-on? [
+    setup-links
+  ]
   init-velocity
   reset-timer
   reset-ticks
@@ -91,16 +94,16 @@ to setup-atoms
     ycor = ymax [
       set posi "urc"
     ]
-    xcor = xmin or xcor = xmin + (1 / 2) and ycor < ymax and ycor >= floor (( ymax + ymin ) / 2) [
+    xcor = xmin or xcor = xmin + (1 / 2) and ycor < ymax and ycor >= (median [ycor] of turtles) [
       set posi "ul"
     ]
-    xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < floor (( ymax + ymin ) / 2) [
+    xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < (median [ycor] of turtles) [
       set posi "ll"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= floor (( ymax + ymin ) / 2) [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= (median [ycor] of turtles) [
       set posi "ur"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < floor (( ymax + ymin ) / 2) [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < (median [ycor] of turtles) [
       set posi "lr"
     ]
     [set posi "body"]
@@ -120,7 +123,17 @@ to setup-atoms
       set curr-x-cor curr-x-cor - x-dist / 2
       set iter-num iter-num + 1
     ]
-  ]
+    ifelse num-atoms-per-row mod 2 = 1 [
+      ask turtles with [ ycor < (median [ycor] of turtles) and ycor >= (median [ycor] of turtles) - y-dist] [
+      set disloc-row? 1
+      ]
+    ]
+    [
+      ask turtles with [ ycor < (median [ycor] of turtles) + y-dist * .75 and ycor >= (median [ycor] of turtles) ] [
+      set disloc-row? 1
+      ]
+     ]
+   ]
 end
 
 to setup-links
@@ -165,7 +178,9 @@ to go
   ]
   ask particles [
     move
-    update-links
+    if lines-on? [
+      update-links
+    ]
   ]
   tick-advance time-step
   update-plots
@@ -242,11 +257,13 @@ to move  ; particle procedure, uses velocity-verlet algorithm
     if posi != "ll" and posi != "lr" [
       set xcor velocity-verlet-pos xcor vx fx
       set ycor velocity-verlet-pos ycor vy fy
+      if xcor > max-pxcor [ die ]
     ]
    ]
   [ ;; force-mode = "Tension"
     set xcor velocity-verlet-pos xcor vx fx
     set ycor velocity-verlet-pos ycor vy fy
+    if xcor > max-pxcor or xcor < min-pycor [ die ]
   ]
 end
 
@@ -261,23 +278,46 @@ to control-temp
   ]
 end
 
+;to update-links
+;  ask particles with [disloc? = 1] [
+;    set heading 325
+;    if any? other turtles in-cone (1.5 * diameter) 5 [
+;      ask other turtles in-cone (1.5 * diameter) 5 [
+;        set heading 180
+;        ask link-with (one-of other turtles in-cone (1.5 * diameter) 50) [die] ]
+;      create-links-with other turtles in-cone (2 * diameter) 5
+;      ask links [ set thickness .25 ]
+;      set disloc? 0
+;      ask particles with [posi = "body"] [
+;        if count link-neighbors < 2 [
+;        set disloc? 1
+;      ]
+;     ]
+;    ]
+;  ]
+;  ask links [
+;    color-links link-length
+;  ]
+;end
+
 to update-links
-  ask particles with [disloc? = 1] [
-    set heading 325
-    if any? other turtles in-cone (2 * diameter) 5 [
-      ask other turtles in-cone (2 * diameter) 5 [
-        set heading 180
-        ask link-with (one-of other turtles in-cone (2 * diameter) 50) [die] ]
-      create-links-with other turtles in-cone (2 * diameter) 5
-      ask links [ set thickness .25 ]
-      set disloc? 0
-      ask particles with [posi = "body"] [
-        if count link-neighbors < 2 [
-        set disloc? 1
+  ask particles with [disloc-row? = 1] [
+    set heading 320
+    if any? other turtles in-cone (1.5 * diameter) 5 with [not link-neighbor? myself] [
+      ask other turtles in-cone (1.5 * diameter) 5 with [not link-neighbor? myself] [
+        set heading 200
+        ask link-with (one-of other turtles in-cone (1.5 * diameter) 50) [die]
       ]
-     ]
-    ]
-  ]
+      create-links-with other turtles in-cone (1.5 * diameter) 5
+      ask links [ set thickness .25 ]
+      ]
+
+    set heading 70
+        if any? other turtles in-cone (1.5 * diameter) 10 [
+      ask other turtles in-cone (1.5 * diameter) 10 with [link-neighbor? myself ] [
+            ask link-with myself [die]
+  ]]]
+
   ask links [
     color-links link-length
   ]
@@ -397,7 +437,7 @@ f-app
 f-app
 0
 .75
-0.75
+0.416
 .001
 1
 NIL
@@ -412,17 +452,17 @@ f-app-vert
 f-app-vert
 0
 .5
-0.12
+0.49
 .01
 1
 NIL
 HORIZONTAL
 
 MONITOR
-60
-365
-135
-410
+57
+416
+132
+461
 T-avg-prop
 mean [sqrt (vx ^ 2 + vy ^ 2)] of turtles
 6
@@ -462,6 +502,17 @@ SWITCH
 355
 update-color?
 update-color?
+0
+1
+-1000
+
+SWITCH
+42
+368
+146
+401
+lines-on?
+lines-on?
 0
 1
 -1000
