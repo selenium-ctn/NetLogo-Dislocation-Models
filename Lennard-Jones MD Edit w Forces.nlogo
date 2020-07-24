@@ -1,6 +1,7 @@
-breed [particles particle]
+breed [atoms atom]
+breed [force-arrows force-arrow]
 
-particles-own [
+atoms-own [
   fx     ; x-component of force vector
   fy     ; y-component of force vector
 ;  prev-x ; possibly switch to regular verlet - faster, lower error
@@ -10,8 +11,6 @@ particles-own [
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
-  disloc?
-  disloc-row?
 ]
 
 globals [
@@ -23,6 +22,7 @@ globals [
   time-step
   sqrt-kb-over-m  ;hmm should probably change if mass is changed
   init-link-len-min
+  cone-check-dist
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -31,15 +31,19 @@ globals [
 
 to setup
   clear-all
-  set diameter .9
+  ifelse crystal-view = "small-atoms-and-lines" [
+    set diameter .6 ]
+    [set diameter .9]
   set r-min 1
   set eps .05 ;; .07
   set sigma .907
   set cutoff-dist 5 * r-min
   set time-step .02
   set sqrt-kb-over-m (1 / 20)
+  set cone-check-dist 1.5
   setup-atoms
-  if lines-on? [
+  setup-force-arrows
+  if crystal-view != "atoms-only" [
     setup-links
   ]
   init-velocity
@@ -48,7 +52,7 @@ to setup
 end
 
 to setup-atoms
-  create-particles num-atoms-per-row ^ 2 [
+  create-atoms num-atoms-per-row ^ 2 [
     set shape "circle"
     set size diameter
     set color blue
@@ -60,7 +64,7 @@ to setup-atoms
     let ypos (- len * x-dist / 2) ;the y position of the first atom
     let xpos (- len * x-dist / 2) ;the x position of the first atom
     let rnum 0
-    ask turtles [
+    ask atoms [
       if xpos >= (len * x-dist / 2)  [
         set rnum rnum + 1
         set xpos (- len * x-dist / 2) + (rnum mod 2) * x-dist / 2
@@ -70,40 +74,45 @@ to setup-atoms
       set xpos xpos + x-dist
     ]
 
-  let ymax [ycor] of one-of turtles with-max [ycor]
-  let xmax [xcor] of one-of turtles with-max [xcor]
-  let ymin [ycor] of one-of turtles with-min [ycor]
-  let xmin [xcor] of one-of turtles with-min [xcor]
+  let ymax [ycor] of one-of atoms with-max [ycor]
+  let xmax [xcor] of one-of atoms with-max [xcor]
+  let ymin [ycor] of one-of atoms with-min [ycor]
+  let xmin [xcor] of one-of atoms with-min [xcor]
 
-  ask turtles [
-    (ifelse ycor = ymin and xcor >= xmin and xcor <= xmin + floor (len / 4 ) [
+  let adjust 0
+
+  if num-atoms-per-row mod 2 = 0
+  [ set adjust x-dist / 2 ]
+
+  ask atoms [
+    (ifelse ycor = ymin and xcor >= xmin and xcor < (median [xcor] of atoms) - round (len / 4 ) [
       set posi "llc"
     ]
-    ycor = ymin and xcor >= xmin + floor (len / 4 ) and xcor < xmax - floor (len / 4 ) [
+    ycor = ymin and xcor > (median [xcor] of atoms) - round (len / 4 ) and xcor < (median [xcor] of atoms) + round (len / 4 ) [
       set posi "b"
     ]
     ycor = ymin [
       set posi "lrc"
     ]
-    ycor = ymax and xcor >= xmin and xcor <= xmin + floor (len / 4 ) [
+    ycor = ymax and xcor >= xmin + adjust and xcor < (median [xcor] of atoms) - round (len / 4 ) + adjust [
       set posi "ulc"
     ]
-    ycor = ymax and xcor >= xmin + floor (len / 4 ) and xcor < xmax - floor (len / 4 ) [
+    ycor = ymax and xcor >(median [xcor] of atoms) - round (len / 4 ) + adjust and xcor < (median [xcor] of atoms) + round (len / 4 ) + adjust [
       set posi "t"
     ]
     ycor = ymax [
       set posi "urc"
     ]
-    xcor = xmin or xcor = xmin + (1 / 2) and ycor < ymax and ycor >= (median [ycor] of turtles) [
+    xcor = xmin or xcor = xmin + (1 / 2) and ycor < ymax and ycor >= (median [ycor] of atoms) [
       set posi "ul"
     ]
-    xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < (median [ycor] of turtles) [
+    xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < (median [ycor] of atoms) [
       set posi "ll"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= (median [ycor] of turtles) [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= (median [ycor] of atoms) [
       set posi "ur"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < (median [ycor] of turtles) [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < (median [ycor] of atoms) [
       set posi "lr"
     ]
     [set posi "body"]
@@ -111,11 +120,11 @@ to setup-atoms
   ]
 
   if create-dislocation? [
-    let curr-y-cor median [ycor] of turtles
-    let curr-x-cor median [xcor] of turtles
+    let curr-y-cor median [ycor] of atoms
+    let curr-x-cor median [xcor] of atoms
     let iter-num 1
     while [ curr-y-cor <= ceiling (ymax) ] [
-      ask turtles with [xcor <= curr-x-cor + x-dist * .75
+      ask atoms with [xcor <= curr-x-cor + x-dist * .75
         and xcor >= curr-x-cor
         and ycor <= curr-y-cor + y-dist * .75
         and ycor >= curr-y-cor ] [ die ]
@@ -123,24 +132,19 @@ to setup-atoms
       set curr-x-cor curr-x-cor - x-dist / 2
       set iter-num iter-num + 1
     ]
-    ifelse num-atoms-per-row mod 2 = 1 [
-      ask turtles with [ ycor < (median [ycor] of turtles) and ycor >= (median [ycor] of turtles) - y-dist] [
-      set disloc-row? 1
-      ]
-    ]
-    [
-      ask turtles with [ ycor < (median [ycor] of turtles) + y-dist * .75 and ycor >= (median [ycor] of turtles) ] [
-      set disloc-row? 1
-      ]
-     ]
    ]
 end
 
 to setup-links
-  ask particles [
-    set heading 325
-    if any? turtles in-cone (2 * diameter) 15 [
-      create-links-with other turtles in-cone (2 * diameter) 15
+  ask atoms [
+    (ifelse link-direction = "diagonal-right" [
+      set heading 330 ]
+    link-direction = "diagonal-left" [
+      set heading 30 ]
+    link-direction = "horizontal" [
+      set heading 90 ])
+    if any? atoms in-cone cone-check-dist 15 [
+      create-links-with other atoms in-cone cone-check-dist 15
     ]
   ]
   set init-link-len-min ([link-length] of min-one-of links [link-length])
@@ -148,16 +152,69 @@ to setup-links
     set thickness .25
     color-links link-length
   ]
-  ask particles with [posi = "body"] [
-    if count link-neighbors < 2 [
-      set disloc? 1
+end
+
+to setup-force-arrows
+  ifelse force-mode = "Shear" [
+  create-force-arrows num-atoms-per-row + ceiling ( num-atoms-per-row / 2 ) - 1[
+    set shape "arrow"
+    set color yellow ]
+
+    ask atoms with [posi = "ulc" or posi = "t" or posi = "urc"] [
+      ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set xcor [xcor] of myself
+        set ycor [ycor] of myself + 2
+        face myself
+      ]
+    ]
+    ask atoms with [posi = "ul"] [
+      ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set xcor [xcor] of myself - 2
+        set ycor [ycor] of myself
+        face myself
+      ]
     ]
   ]
+  [
+    create-force-arrows 2 * num-atoms-per-row + count atoms with
+    [posi = "urc" or posi = "lrc" or posi = "ulc" or posi = "llc" ] - 4 [
+    set shape "arrow"
+    set color yellow ]
+
+    ask atoms with [posi = "ulc" or posi = "urc"] [
+      ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set xcor [xcor] of myself
+        set ycor [ycor] of myself + 2
+        face myself
+      ]
+    ]
+    ask atoms with [posi = "llc" or posi = "lrc"] [
+      ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set xcor [xcor] of myself
+        set ycor [ycor] of myself - 2
+        face myself
+      ]
+    ]
+    ask atoms with [posi = "ul" or posi = "ll"] [
+      ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set xcor [xcor] of myself - 2
+        set ycor [ycor] of myself
+        face myself
+      ]
+    ]
+    ask atoms with [posi = "ur" or posi = "lr"] [
+      ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set xcor [xcor] of myself + 2
+        set ycor [ycor] of myself
+        face myself
+      ]
+     ]
+    ]
 end
 
 to init-velocity
   let v-avg sqrt-kb-over-m * sqrt system-temp
-  ask particles [
+  ask atoms [
     let x-y-split random-float 1
     set vx v-avg * x-y-split * positive-or-negative
     set vy v-avg * (1 - x-y-split) * positive-or-negative]
@@ -173,30 +230,37 @@ end
 
 to go
   control-temp
-  ask particles [
+  if crystal-view != "atoms-only" [
+    ask links [die]
+  ]
+  ask atoms [
     update-force-and-velocity
   ]
-  ask particles [
+  ask atoms [
     move
-    if lines-on? [
-      update-links
-    ]
+  ]
+  if crystal-view != "atoms-only" [
+    ask links [
+      set thickness .25
+      color-links link-length]
   ]
   tick-advance time-step
   update-plots
 end
 
-to update-force-and-velocity  ; particle procedure
+to update-force-and-velocity  ; atom procedure
   let new-fx 0
   let new-fy 0
   let total-force 0
-  ask other particles in-radius cutoff-dist [
+  let in-radius-atoms (other atoms in-radius cutoff-dist)
+  ask in-radius-atoms [
     let r distance myself
     let force LJ-force r
     set total-force total-force + abs(force)
     face myself
     set new-fx new-fx + (force * dx)
-    set new-fy new-fy + (force * dy)]
+    set new-fy new-fy + (force * dy)
+    ]
 
   (ifelse force-mode = "Shear" [
       (ifelse posi = "ul" [
@@ -220,6 +284,19 @@ to update-force-and-velocity  ; particle procedure
    set fy new-fy
    if update-color? [
     set-color total-force
+  ]
+
+  if crystal-view != "atoms-only" [
+    (ifelse link-direction = "diagonal-right" [
+      set heading 330 ]
+    link-direction = "diagonal-left" [
+      set heading 30 ]
+    link-direction = "horizontal" [
+      set heading 90 ])
+    let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 90)
+    if any? in-cone-atoms [
+      create-link-with min-one-of in-cone-atoms [distance myself]
+    ]
   ]
 end
 
@@ -252,7 +329,7 @@ to-report LJ-force [ r ]
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 
-to move  ; particle procedure, uses velocity-verlet algorithm
+to move  ; atom procedure, uses velocity-verlet algorithm
   ifelse force-mode = "Shear" [
     if posi != "ll" and posi != "lr" [
       set xcor velocity-verlet-pos xcor vx fx
@@ -268,58 +345,13 @@ to move  ; particle procedure, uses velocity-verlet algorithm
 end
 
 to control-temp
-  let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of turtles
+  let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
   let target-v-avg sqrt-kb-over-m * sqrt system-temp
   if current-v-avg != 0 [
-    ask particles [
+    ask atoms [
       set vx vx * (target-v-avg / current-v-avg)
       set vy vy * (target-v-avg / current-v-avg)
     ]
-  ]
-end
-
-;to update-links
-;  ask particles with [disloc? = 1] [
-;    set heading 325
-;    if any? other turtles in-cone (1.5 * diameter) 5 [
-;      ask other turtles in-cone (1.5 * diameter) 5 [
-;        set heading 180
-;        ask link-with (one-of other turtles in-cone (1.5 * diameter) 50) [die] ]
-;      create-links-with other turtles in-cone (2 * diameter) 5
-;      ask links [ set thickness .25 ]
-;      set disloc? 0
-;      ask particles with [posi = "body"] [
-;        if count link-neighbors < 2 [
-;        set disloc? 1
-;      ]
-;     ]
-;    ]
-;  ]
-;  ask links [
-;    color-links link-length
-;  ]
-;end
-
-to update-links
-  ask particles with [disloc-row? = 1] [
-    set heading 320
-    if any? other turtles in-cone (1.5 * diameter) 5 with [not link-neighbor? myself] [
-      ask other turtles in-cone (1.5 * diameter) 5 with [not link-neighbor? myself] [
-        set heading 200
-        ask link-with (one-of other turtles in-cone (1.5 * diameter) 50) [die]
-      ]
-      create-links-with other turtles in-cone (1.5 * diameter) 5
-      ask links [ set thickness .25 ]
-      ]
-
-    set heading 70
-        if any? other turtles in-cone (1.5 * diameter) 10 [
-      ask other turtles in-cone (1.5 * diameter) 10 with [link-neighbor? myself ] [
-            ask link-with myself [die]
-  ]]]
-
-  ask links [
-    color-links link-length
   ]
 end
 
@@ -336,8 +368,8 @@ to set-color [v]
 end
 
 to color-links [len]
-  (ifelse len < init-link-len-min [set color red]
-    len > 1.0180731 [set color green] ;; equilibrium bond length
+  (ifelse len < init-link-len-min [set color scale-color red sqrt (init-link-len-min - len) -.05 .3]
+    len > 1.0180731 [set color scale-color green sqrt (len - 1.0180731) -.05 .3] ;; equilibrium bond length
     [set color gray]
     )
 end
@@ -411,7 +443,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension"
-0
+1
 
 SLIDER
 12
@@ -437,7 +469,7 @@ f-app
 f-app
 0
 .75
-0.416
+0.139
 .001
 1
 NIL
@@ -452,22 +484,11 @@ f-app-vert
 f-app-vert
 0
 .5
-0.49
+0.2
 .01
 1
 NIL
 HORIZONTAL
-
-MONITOR
-57
-416
-132
-461
-T-avg-prop
-mean [sqrt (vx ^ 2 + vy ^ 2)] of turtles
-6
-1
-11
 
 SWITCH
 16
@@ -476,7 +497,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -487,9 +508,9 @@ SLIDER
 139
 num-atoms-per-row
 num-atoms-per-row
-1
+5
 20
-10.0
+12.0
 1
 1
 NIL
@@ -506,16 +527,36 @@ update-color?
 1
 -1000
 
-SWITCH
-42
-368
-146
-401
-lines-on?
-lines-on?
+CHOOSER
+29
+419
+167
+464
+link-direction
+link-direction
+"diagonal-right" "diagonal-left" "horizontal"
 0
+
+SWITCH
+35
+476
+158
+509
+hide-atoms?
+hide-atoms?
+1
 1
 -1000
+
+CHOOSER
+17
+363
+184
+408
+crystal-view
+crystal-view
+"atoms-only" "atoms-and-lines" "small-atoms-and-lines" "lines-only"
+2
 
 @#$#@#$#@
 ## WHAT IS IT?
