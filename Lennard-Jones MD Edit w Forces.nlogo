@@ -46,6 +46,9 @@ to setup
   if crystal-view != "atoms-only" [
     setup-links
   ]
+  if crystal-view = "lines-only" [
+    ask atoms [ hide-turtle ]
+  ]
   init-velocity
   reset-timer
   reset-ticks
@@ -164,6 +167,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
+        set size f-app-vert * 2
         face myself
       ]
     ]
@@ -171,8 +175,12 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
+        set size sqrt( f-app ) * 2
         face myself
       ]
+    ]
+  if create-dislocation? [
+      ask force-arrows with [xcor = 0 and ycor = 0] [ die ]
     ]
   ]
   [
@@ -185,6 +193,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
+        set size f-app-vert * 2
         face myself
       ]
     ]
@@ -192,6 +201,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself - 2
+        set size f-app-vert * 2
         face myself
       ]
     ]
@@ -199,14 +209,18 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
+        set size sqrt( f-app ) * 2
         face myself
+        rt 180
       ]
     ]
     ask atoms with [posi = "ur" or posi = "lr"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself + 2
         set ycor [ycor] of myself
+        set size sqrt( f-app ) * 2
         face myself
+        rt 180
       ]
      ]
     ]
@@ -293,7 +307,7 @@ to update-force-and-velocity  ; atom procedure
       set heading 30 ]
     link-direction = "horizontal" [
       set heading 90 ])
-    let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 90)
+    let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
     if any? in-cone-atoms [
       create-link-with min-one-of in-cone-atoms [distance myself]
     ]
@@ -443,7 +457,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension"
-1
+0
 
 SLIDER
 12
@@ -469,7 +483,7 @@ f-app
 f-app
 0
 .75
-0.139
+0.325
 .001
 1
 NIL
@@ -484,7 +498,7 @@ f-app-vert
 f-app-vert
 0
 .5
-0.2
+0.19
 .01
 1
 NIL
@@ -497,7 +511,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -510,7 +524,7 @@ num-atoms-per-row
 num-atoms-per-row
 5
 20
-12.0
+11.0
 1
 1
 NIL
@@ -536,17 +550,6 @@ link-direction
 link-direction
 "diagonal-right" "diagonal-left" "horizontal"
 0
-
-SWITCH
-35
-476
-158
-509
-hide-atoms?
-hide-atoms?
-1
-1
--1000
 
 CHOOSER
 17
