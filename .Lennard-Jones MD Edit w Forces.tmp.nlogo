@@ -24,7 +24,7 @@ globals [
   sigma
   cutoff-dist
   time-step
-  sqrt-kb-over-m  ;hmm should probably change if mass is changed
+  sqrt-2-kb-over-m  ;hmm should probably change if mass is changed
   cone-check-dist
   num-atoms
 ]
@@ -43,7 +43,7 @@ to setup
   set sigma .907 ;; .89090
   set cutoff-dist 5 * r-min
   set time-step .02
-  set sqrt-kb-over-m (1 / 20)
+  set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms num-atoms-per-row ^ 2
   setup-atoms
@@ -244,7 +244,7 @@ to setup-force-arrows
 end
 
 to init-velocity
-  let v-avg sqrt-kb-over-m * sqrt system-temp
+  let v-avg sqrt-2-kb-over-m * sqrt system-temp
   ask atoms [
     let x-y-split random-float 1
     set vx v-avg * x-y-split * positive-or-negative
@@ -438,7 +438,7 @@ end
 
 to control-temp
   let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
-  let target-v-avg sqrt-kb-over-m * sqrt system-temp
+  let target-v-avg sqrt-2-kb-over-m * sqrt system-temp
   if current-v-avg != 0 [
     ask atoms [
       set vx vx * (target-v-avg / current-v-avg)
@@ -460,7 +460,7 @@ to set-color [v]
 end
 
 to color-links [len]
-  (ifelse len < .998 [set color scale-color red sqrt (.998 - len) -.05 .3]
+  (ifelse len < .995 [set color scale-color red sqrt (.995 - len) -.05 .3]
     len > 1.018073 [set color scale-color yellow sqrt (len - 1.018073) -.05 .3] ;; equilibrium bond length
     [set color gray]
     )
@@ -561,10 +561,10 @@ f-app
 f-app
 0
 300
-0.0
+50.0
 1
 1
-NIL
+Newtons
 HORIZONTAL
 
 SLIDER
@@ -589,7 +589,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
