@@ -13,6 +13,10 @@ atoms-own [
   mass
 ]
 
+force-arrows-own [
+  my-atom ; the atom that the force-arrow is indicating the force on
+]
+
 globals [
   diameter
   r-min
@@ -167,7 +171,8 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
-        set size f-app-vert ** 2
+        set my-atom [who] of myself
+        set size f-app-vert * 2
         face myself
       ]
     ]
@@ -175,6 +180,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
+        set my-atom [who] of myself
         set size sqrt( f-app ) * 2
         face myself
       ]
@@ -193,6 +199,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
+        set my-atom [who] of myself
         set size f-app-vert * 2
         face myself
       ]
@@ -201,6 +208,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself - 2
+        set my-atom [who] of myself
         set size f-app-vert * 2
         face myself
       ]
@@ -210,6 +218,7 @@ to setup-force-arrows
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
         set size sqrt( f-app ) * 2
+        set my-atom [who] of myself
         face myself
         rt 180
       ]
@@ -219,6 +228,7 @@ to setup-force-arrows
         set xcor [xcor] of myself + 2
         set ycor [ycor] of myself
         set size sqrt( f-app ) * 2
+        set my-atom [who] of myself
         face myself
         rt 180
       ]
@@ -344,18 +354,65 @@ to-report LJ-force [ r ]
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
-  ifelse force-mode = "Shear" [
-    if posi != "ll" and posi != "lr" [
+    ifelse force-mode = "Shear" [
+      if posi != "ll" and posi != "lr" [
+        set xcor velocity-verlet-pos xcor vx fx
+        set ycor velocity-verlet-pos ycor vy fy
+        (ifelse posi = "ul" [
+          ask force-arrows with [my-atom = [who] of myself] [
+            set xcor [xcor] of myself - 2
+            set size sqrt( f-app ) * 2
+          ]
+        ]
+        posi = "ulc" or posi = "t" or posi = "urc" [
+            ask force-arrows with [my-atom = [who] of myself] [
+              set xcor [xcor] of myself
+              set size f-app-vert * 2 ]
+        ])
+        if xcor > max-pxcor [
+            if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
+              ask force-arrows with [my-atom = [who] of myself] [die]
+          ]
+         die
+        ]
+      ]
+    ]
+    [ ;; force-mode = "Tension"
       set xcor velocity-verlet-pos xcor vx fx
       set ycor velocity-verlet-pos ycor vy fy
-      if xcor > max-pxcor [ die ]
+      (ifelse posi = "ul" or posi = "ll" [
+          ask force-arrows with [my-atom = [who] of myself] [
+            set xcor [xcor] of myself - 2
+            set ycor [ycor] of myself
+
+          ]
+        ]
+        posi = "ulc" or posi = "urc" [
+            ask force-arrows with [my-atom = [who] of myself] [
+              set ycor [ycor] of myself + 2
+              set xcor [xcor] of myself
+          ]
+        ]
+        posi = "ur" or posi = "lr" [
+          ask force-arrows with [my-atom = [who] of myself] [
+            set xcor [xcor] of myself + 2
+            set ycor [ycor] of myself
+          ]
+        ]
+        posi = "llc" or posi = "lrc" [
+           ask force-arrows with [my-atom = [who] of myself] [
+             set ycor [ycor] of myself - 2
+             set xcor [xcor] of myself
+          ]
+        ])
+      if xcor > max-pxcor or xcor < min-pycor [
+        if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
+        ask force-arrows with [my-atom = [who] of myself] [die]
+      ]
+      die
+     ]
     ]
-   ]
-  [ ;; force-mode = "Tension"
-    set xcor velocity-verlet-pos xcor vx fx
-    set ycor velocity-verlet-pos ycor vy fy
-    if xcor > max-pxcor or xcor < min-pycor [ die ]
-  ]
+
 end
 
 to control-temp
@@ -457,7 +514,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension"
-0
+1
 
 SLIDER
 12
@@ -483,7 +540,7 @@ f-app
 f-app
 0
 .75
-0.325
+0.153
 .001
 1
 NIL
@@ -511,7 +568,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -524,7 +581,7 @@ num-atoms-per-row
 num-atoms-per-row
 5
 20
-11.0
+10.0
 1
 1
 NIL
