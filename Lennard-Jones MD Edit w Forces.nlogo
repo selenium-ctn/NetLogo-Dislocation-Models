@@ -27,6 +27,7 @@ globals [
   sqrt-2-kb-over-m  ;hmm should probably change if mass is changed
   cone-check-dist
   num-atoms
+  vert-force-count
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -45,7 +46,9 @@ to setup
   set time-step .02
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
-  set num-atoms num-atoms-per-row ^ 2
+  ;set num-atoms num-atoms-per-row ^ 2
+  set num-atoms atoms-per-row * atoms-per-column
+
   setup-atoms
   setup-force-arrows
   setup-links
@@ -64,7 +67,9 @@ to setup-atoms
     set color blue
     set mass 1
   ]
-    let len num-atoms-per-row ;the # of atoms in a row ; l formerly
+    ;let len num-atoms-per-row ;the # of atoms in a row
+    let len atoms-per-row
+
     let x-dist r-min
     let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2)
     let ypos (- len * x-dist / 2) ;the y position of the first atom
@@ -87,7 +92,8 @@ to setup-atoms
 
   let adjust 0
 
-  if num-atoms-per-row mod 2 = 0
+  ;if num-atoms-per-row mod 2 = 0
+  if atoms-per-column mod 2 = 0
   [ set adjust x-dist / 2 ]
 
   ask atoms [
@@ -170,7 +176,8 @@ end
 
 to setup-force-arrows
   ifelse force-mode = "Shear" [
-  create-force-arrows num-atoms-per-row + ceiling ( num-atoms-per-row / 2 ) - 1[
+  ;create-force-arrows num-atoms-per-row + ceiling ( num-atoms-per-row / 2 ) - 1[
+  create-force-arrows atoms-per-row + ceiling ( atoms-per-column / 2 ) - 1[
     set shape "arrow"
     set color white ]
 
@@ -179,7 +186,8 @@ to setup-force-arrows
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size (f-app-vert / num-atoms) * 2
+        set size (f-app-vert / atoms-per-row) * 2
+        ;set label f-app-vert / atoms-per-row
         face myself
       ]
     ]
@@ -188,7 +196,8 @@ to setup-force-arrows
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
         set my-atom [who] of myself
-        set size sqrt( (f-app / num-atoms) ) * 2
+        set size sqrt( (f-app / (ceiling ( atoms-per-column / 2 ) - 1)) ) * 2
+       ; set label f-app / (ceiling ( atoms-per-column / 2 ) - 1)
         face myself
       ]
     ]
@@ -197,17 +206,19 @@ to setup-force-arrows
     ]
   ]
   [
-    create-force-arrows 2 * num-atoms-per-row + count atoms with
-    [posi = "urc" or posi = "lrc" or posi = "ulc" or posi = "llc" ] - 4 [
+    ;create-force-arrows 2 * num-atoms-per-row + count atoms with
+    set vert-force-count count atoms with [posi = "urc" or posi = "lrc" or posi = "ulc" or posi = "llc" ]
+    create-force-arrows 2 * atoms-per-column + vert-force-count - 4 [
     set shape "arrow"
-    set color yellow ]
+    set color white ]
 
     ask atoms with [posi = "ulc" or posi = "urc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size (f-app-vert / num-atoms) * 2
+        set size (f-app-vert / vert-force-count) * 2
+       ; set label f-app-vert / vert-force-count
         face myself
       ]
     ]
@@ -216,7 +227,8 @@ to setup-force-arrows
         set xcor [xcor] of myself
         set ycor [ycor] of myself - 2
         set my-atom [who] of myself
-        set size (f-app-vert / num-atoms) * 2
+        set size (f-app-vert / vert-force-count) * 2
+       ; set label f-app-vert / vert-force-count
         face myself
       ]
     ]
@@ -224,7 +236,8 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
-        set size sqrt( (f-app / num-atoms) ) * 2
+        set size sqrt( (f-app / (2 * atoms-per-column - 4)))  * 2
+       ; set label f-app / (2 * atoms-per-column - 4)
         set my-atom [who] of myself
         face myself
         rt 180
@@ -234,7 +247,8 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself + 2
         set ycor [ycor] of myself
-        set size sqrt( (f-app / num-atoms) ) * 2
+        set size sqrt( (f-app / (2 * atoms-per-column - 4)) ) * 2
+        ;set label f-app / (2 * atoms-per-column - 4)
         set my-atom [who] of myself
         face myself
         rt 180
@@ -341,9 +355,9 @@ to update-force-and-velocity  ; atom procedure
 end
 
 to-report report-new-force [ pos f-gen ]
-  let f-app-per-atom f-app / num-atoms
-  let f-app-vert-per-atom (f-app-vert / 100) / num-atoms
   (ifelse force-mode = "Shear" [
+      let f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
+      let f-app-vert-per-atom ((f-app-vert / 100) / atoms-per-row)
      (ifelse pos = "ul" [
        report f-gen + f-app-per-atom
       ]
@@ -352,6 +366,8 @@ to-report report-new-force [ pos f-gen ]
       ])
    ]
   force-mode = "Tension" [
+        let f-app-per-atom  f-app / (2 * atoms-per-column - 4)
+        let f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
      (ifelse pos = "ul" or pos = "ll" [
        report f-gen - f-app-per-atom
       ]
@@ -379,13 +395,18 @@ to move  ; atom procedure, uses velocity-verlet algorithm
         (ifelse posi = "ul" [
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself - 2
-            set size sqrt( (f-app / num-atoms) ) * 2
+            set size sqrt( (f-app / (ceiling ( atoms-per-column / 2 ) - 1)) ) * 2
+
+            ;set label f-app / num-atoms
           ]
         ]
         posi = "ulc" or posi = "t" or posi = "urc" [
             ask force-arrows with [my-atom = [who] of myself] [
               set xcor [xcor] of myself
-              set size (f-app-vert / num-atoms) * 2 ]
+
+            set size (f-app-vert / atoms-per-row) * 2
+              ;set label f-app-vert / num-atoms
+          ]
         ])
         if xcor > max-pxcor [
             if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
@@ -403,6 +424,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
             set xcor [xcor] of myself - 2
             set ycor [ycor] of myself
             set size sqrt( (f-app / num-atoms) ) * 2
+            ;set label f-app / num-atoms
           ]
         ]
         posi = "ulc" or posi = "urc" [
@@ -410,6 +432,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
               set ycor [ycor] of myself + 2
               set xcor [xcor] of myself
               set size (f-app-vert / num-atoms) * 2
+              ;set label f-app-vert / num-atoms
           ]
         ]
         posi = "ur" or posi = "lr" [
@@ -417,6 +440,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
             set xcor [xcor] of myself + 2
             set ycor [ycor] of myself
             set size sqrt( (f-app / num-atoms) ) * 2
+            ;set label f-app / num-atoms
           ]
         ]
         posi = "llc" or posi = "lrc" [
@@ -424,6 +448,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
              set ycor [ycor] of myself - 2
              set xcor [xcor] of myself
              set size (f-app-vert / num-atoms) * 2
+             ;set label f-app-vert / num-atoms
           ]
         ])
       if xcor > max-pxcor or xcor < min-pycor [
@@ -432,8 +457,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
       ]
       die
      ]
-    ]
-
+   ]
 end
 
 to control-temp
@@ -494,10 +518,10 @@ ticks
 30.0
 
 BUTTON
-8
-274
-94
-307
+10
+379
+96
+412
 NIL
 setup
 NIL
@@ -511,10 +535,10 @@ NIL
 1
 
 BUTTON
-104
-274
-189
-307
+106
+379
+191
+412
 NIL
 go
 T
@@ -538,81 +562,66 @@ force-mode
 0
 
 SLIDER
-12
-146
-184
-179
+14
+249
+186
+282
 system-temp
 system-temp
 0
-1
-0.62
+.75
+0.36
 .01
 1
 NIL
 HORIZONTAL
 
 SLIDER
-12
-189
-184
-222
+14
+292
+186
+325
 f-app
 f-app
 0
-300
-50.0
-1
+12
+0.0
+.1
 1
 N
 HORIZONTAL
 
 SLIDER
-12
-232
-184
-265
+14
+335
+186
+368
 f-app-vert
 f-app-vert
 0
-200
+8
 0.0
-1
+.1
 1
 cN
 HORIZONTAL
 
 SWITCH
-16
-65
-175
-98
+20
+123
+179
+156
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
-SLIDER
-11
-106
-183
-139
-num-atoms-per-row
-num-atoms-per-row
-5
-20
-11.0
-1
-1
-NIL
-HORIZONTAL
-
 SWITCH
-30
-322
-162
-355
+740
+19
+872
+52
 update-color?
 update-color?
 0
@@ -620,20 +629,20 @@ update-color?
 -1000
 
 CHOOSER
-17
-363
-184
-408
+14
+66
+181
+111
 crystal-view
 crystal-view
 "large-atoms" "small-atoms" "hide-atoms"
 1
 
 SWITCH
-21
-417
-180
-450
+733
+60
+892
+93
 diagonal-right-links
 diagonal-right-links
 0
@@ -641,10 +650,10 @@ diagonal-right-links
 -1000
 
 SWITCH
-24
-458
-176
-491
+736
+101
+888
+134
 diagonal-left-links
 diagonal-left-links
 0
@@ -652,15 +661,45 @@ diagonal-left-links
 -1000
 
 SWITCH
-32
-499
-170
-532
+744
+142
+882
+175
 horizontal-links
 horizontal-links
-0
+1
 1
 -1000
+
+SLIDER
+14
+164
+186
+197
+atoms-per-row
+atoms-per-row
+5
+15
+10.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+14
+206
+186
+239
+atoms-per-column
+atoms-per-column
+5
+15
+10.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
