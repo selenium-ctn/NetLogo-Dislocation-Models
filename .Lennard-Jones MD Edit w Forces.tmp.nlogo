@@ -25,8 +25,8 @@ globals [
   cutoff-dist
   time-step
   sqrt-kb-over-m  ;hmm should probably change if mass is changed
-  init-link-len-min
   cone-check-dist
+  num-atoms
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -35,22 +35,21 @@ globals [
 
 to setup
   clear-all
-  ifelse crystal-view = "small-atoms-and-lines" [
+  ifelse crystal-view = "small-atoms" [
     set diameter .6 ]
     [set diameter .9]
   set r-min 1
-  set eps .05 ;; .07
-  set sigma .907
+  set eps .05 ;  1
+  set sigma .907 ;; .89090
   set cutoff-dist 5 * r-min
   set time-step .02
   set sqrt-kb-over-m (1 / 20)
   set cone-check-dist 1.5
+  set num-atoms num-atoms-per-row ^ 2
   setup-atoms
   setup-force-arrows
-  if crystal-view != "atoms-only" [
-    setup-links
-  ]
-  if crystal-view = "lines-only" [
+  setup-links
+  if crystal-view = "hide-atoms" [
     ask atoms [ hide-turtle ]
   ]
   init-velocity
@@ -59,7 +58,7 @@ to setup
 end
 
 to setup-atoms
-  create-atoms num-atoms-per-row ^ 2 [
+  create-atoms num-atoms [
     set shape "circle"
     set size diameter
     set color blue
@@ -144,17 +143,25 @@ end
 
 to setup-links
   ask atoms [
-    (ifelse link-direction = "diagonal-right" [
-      set heading 330 ]
-    link-direction = "diagonal-left" [
-      set heading 30 ]
-    link-direction = "horizontal" [
-      set heading 90 ])
-    if any? atoms in-cone cone-check-dist 15 [
-      create-links-with other atoms in-cone cone-check-dist 15
-    ]
+    if diagonal-right-links [
+      set heading 330
+      if any? atoms in-cone cone-check-dist 15 [
+        create-links-with other atoms in-cone cone-check-dist 15
+       ]
+      ]
+    if diagonal-left-links [
+      set heading 30
+      if any? atoms in-cone cone-check-dist 15 [
+        create-links-with other atoms in-cone cone-check-dist 15
+       ]
+      ]
+    if horizontal-links [
+      set heading 90
+      if any? atoms in-cone cone-check-dist 15 [
+        create-links-with other atoms in-cone cone-check-dist 15
+       ]
+     ]
   ]
-  set init-link-len-min ([link-length] of min-one-of links [link-length])
   ask links [
     set thickness .25
     color-links link-length
@@ -165,14 +172,14 @@ to setup-force-arrows
   ifelse force-mode = "Shear" [
   create-force-arrows num-atoms-per-row + ceiling ( num-atoms-per-row / 2 ) - 1[
     set shape "arrow"
-    set color yellow ]
+    set color white ]
 
     ask atoms with [posi = "ulc" or posi = "t" or posi = "urc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size f-app-vert * 2
+        set size (f-app-vert / num-atoms) * 2
         face myself
       ]
     ]
@@ -181,7 +188,7 @@ to setup-force-arrows
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
         set my-atom [who] of myself
-        set size sqrt( f-app ) * 2
+        set size sqrt( (f-app / num-atoms) ) * 2
         face myself
       ]
     ]
@@ -200,7 +207,7 @@ to setup-force-arrows
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size f-app-vert * 2
+        set size (f-app-vert / num-atoms) * 2
         face myself
       ]
     ]
@@ -209,7 +216,7 @@ to setup-force-arrows
         set xcor [xcor] of myself
         set ycor [ycor] of myself - 2
         set my-atom [who] of myself
-        set size f-app-vert * 2
+        set size (f-app-vert / num-atoms) * 2
         face myself
       ]
     ]
@@ -217,7 +224,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
-        set size sqrt( f-app ) * 2
+        set size sqrt( (f-app / num-atoms) ) * 2
         set my-atom [who] of myself
         face myself
         rt 180
@@ -227,7 +234,7 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself + 2
         set ycor [ycor] of myself
-        set size sqrt( f-app ) * 2
+        set size sqrt( (f-app / num-atoms) ) * 2
         set my-atom [who] of myself
         face myself
         rt 180
@@ -263,7 +270,7 @@ to go
   ask atoms [
     move
   ]
-  if crystal-view != "atoms-only" [
+  if any? links [
     ask links [
       set thickness .25
       color-links link-length]
@@ -310,41 +317,52 @@ to update-force-and-velocity  ; atom procedure
     set-color total-force
   ]
 
-  if crystal-view != "atoms-only" [
-    (ifelse link-direction = "diagonal-right" [
-      set heading 330 ]
-    link-direction = "diagonal-left" [
-      set heading 30 ]
-    link-direction = "horizontal" [
-      set heading 90 ])
-    let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
-    if any? in-cone-atoms [
-      create-link-with min-one-of in-cone-atoms [distance myself]
-    ]
-  ]
+    if diagonal-right-links [
+      set heading 330
+      let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
+       if any? in-cone-atoms [
+        create-link-with min-one-of in-cone-atoms [distance myself]
+       ]
+      ]
+    if diagonal-left-links [
+      set heading 30
+      let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
+       if any? in-cone-atoms [
+        create-link-with min-one-of in-cone-atoms [distance myself]
+       ]
+      ]
+    if horizontal-links [
+      set heading 90
+      let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
+       if any? in-cone-atoms [
+        create-link-with min-one-of in-cone-atoms [distance myself]
+       ]
+      ]
 end
 
 to-report report-new-force [ pos f-gen ]
+  let f-app-per-atom f-app / num-atoms
+  let f-app-vert-per-atom (f-app-vert / 100) / num-atoms
   (ifelse force-mode = "Shear" [
      (ifelse pos = "ul" [
-       report f-gen + f-app
+       report f-gen + f-app-per-atom
       ]
       pos = "ulc" or pos = "t" or pos = "urc" [
-        report f-gen - (f-app-vert / 100)
+        report f-gen - f-app-vert-per-atom
       ])
    ]
   force-mode = "Tension" [
      (ifelse pos = "ul" or pos = "ll" [
-       report f-gen - f-app
+       report f-gen - f-app-per-atom
       ]
      pos = "ur" or pos = "lr" [
-       report f-gen + f-app
+       report f-gen + f-app-per-atom
       ]
      pos = "ulc" or pos = "urc"  [
-       report f-gen - (f-app-vert / 100)
+       report f-gen - f-app-vert-per-atom
       ]
      pos = "llc" or pos = "lrc"  [
-       report f-gen + (f-app-vert / 100)
+       report f-gen + f-app-vert-per-atom
      ])
     ])
 end
@@ -361,13 +379,13 @@ to move  ; atom procedure, uses velocity-verlet algorithm
         (ifelse posi = "ul" [
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself - 2
-            set size sqrt( f-app ) * 2
+            set size sqrt( (f-app / num-atoms) ) * 2
           ]
         ]
         posi = "ulc" or posi = "t" or posi = "urc" [
             ask force-arrows with [my-atom = [who] of myself] [
               set xcor [xcor] of myself
-              set size f-app-vert * 2 ]
+              set size (f-app-vert / num-atoms) * 2 ]
         ])
         if xcor > max-pxcor [
             if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
@@ -384,25 +402,28 @@ to move  ; atom procedure, uses velocity-verlet algorithm
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself - 2
             set ycor [ycor] of myself
-
+            set size sqrt( (f-app / num-atoms) ) * 2
           ]
         ]
         posi = "ulc" or posi = "urc" [
             ask force-arrows with [my-atom = [who] of myself] [
               set ycor [ycor] of myself + 2
               set xcor [xcor] of myself
+              set size (f-app-vert / num-atoms) * 2
           ]
         ]
         posi = "ur" or posi = "lr" [
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself + 2
             set ycor [ycor] of myself
+            set size sqrt( (f-app / num-atoms) ) * 2
           ]
         ]
         posi = "llc" or posi = "lrc" [
            ask force-arrows with [my-atom = [who] of myself] [
              set ycor [ycor] of myself - 2
              set xcor [xcor] of myself
+             set size (f-app-vert / num-atoms) * 2
           ]
         ])
       if xcor > max-pxcor or xcor < min-pycor [
@@ -439,8 +460,8 @@ to set-color [v]
 end
 
 to color-links [len]
-  (ifelse len < init-link-len-min [set color scale-color red sqrt (init-link-len-min - len) -.05 .3]
-    len > 1.0180731 [set color scale-color green sqrt (len - 1.0180731) -.05 .3] ;; equilibrium bond length
+  (ifelse len < .998 [set color scale-color red sqrt (.998 - len) -.05 .3]
+    len > 1.018073 [set color scale-color yellow sqrt (len - 1.018073) -.05 .3] ;; equilibrium bond length
     [set color gray]
     )
 end
@@ -514,7 +535,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension"
-1
+0
 
 SLIDER
 12
@@ -525,7 +546,7 @@ system-temp
 system-temp
 0
 1
-0.23
+0.62
 .01
 1
 NIL
@@ -539,9 +560,9 @@ SLIDER
 f-app
 f-app
 0
-.75
-0.153
-.001
+300
+0.0
+1
 1
 NIL
 HORIZONTAL
@@ -554,9 +575,9 @@ SLIDER
 f-app-vert
 f-app-vert
 0
-.5
-0.19
-.01
+200
+0.0
+1
 1
 NIL
 HORIZONTAL
@@ -581,7 +602,7 @@ num-atoms-per-row
 num-atoms-per-row
 5
 20
-10.0
+11.0
 1
 1
 NIL
@@ -599,24 +620,47 @@ update-color?
 -1000
 
 CHOOSER
-29
-419
-167
-464
-link-direction
-link-direction
-"diagonal-right" "diagonal-left" "horizontal"
-0
-
-CHOOSER
 17
 363
 184
 408
 crystal-view
 crystal-view
-"atoms-only" "atoms-and-lines" "small-atoms-and-lines" "lines-only"
-2
+"large-atoms" "small-atoms" "hide-atoms"
+1
+
+SWITCH
+21
+417
+180
+450
+diagonal-right-links
+diagonal-right-links
+0
+1
+-1000
+
+SWITCH
+24
+458
+176
+491
+diagonal-left-links
+diagonal-left-links
+0
+1
+-1000
+
+SWITCH
+32
+499
+170
+532
+horizontal-links
+horizontal-links
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
