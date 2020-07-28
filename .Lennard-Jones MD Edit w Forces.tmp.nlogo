@@ -27,7 +27,8 @@ globals [
   sqrt-2-kb-over-m  ;hmm should probably change if mass is changed
   cone-check-dist
   num-atoms
-  vert-force-count
+  f-app-per-atom
+  f-app-vert-per-atom
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -46,9 +47,7 @@ to setup
   set time-step .02
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
-  ;set num-atoms num-atoms-per-row ^ 2
   set num-atoms atoms-per-row * atoms-per-column
-
   setup-atoms
   setup-force-arrows
   setup-links
@@ -67,9 +66,7 @@ to setup-atoms
     set color blue
     set mass 1
   ]
-    ;let len num-atoms-per-row ;the # of atoms in a row
     let len atoms-per-row
-
     let x-dist r-min
     let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2)
     let ypos (- len * x-dist / 2) ;the y position of the first atom
@@ -89,42 +86,43 @@ to setup-atoms
   let xmax [xcor] of one-of atoms with-max [xcor]
   let ymin [ycor] of one-of atoms with-min [ycor]
   let xmin [xcor] of one-of atoms with-min [xcor]
+  let median-xcor (median [xcor] of atoms)
+  let median-ycor (median [ycor] of atoms)
+  let sectioning-value round (len / 4 )
 
-  let adjust 0
-
-  ;if num-atoms-per-row mod 2 = 0
+  let even-offset-adjust 0
   if atoms-per-column mod 2 = 0
-  [ set adjust x-dist / 2 ]
+  [ set even-offset-adjust x-dist / 2 ]
 
   ask atoms [
-    (ifelse ycor = ymin and xcor >= xmin and xcor < (median [xcor] of atoms) - round (len / 4 ) [
+    (ifelse ycor = ymin and xcor >= xmin and xcor < median-xcor - sectioning-value [
       set posi "llc"
     ]
-    ycor = ymin and xcor > (median [xcor] of atoms) - round (len / 4 ) and xcor < (median [xcor] of atoms) + round (len / 4 ) [
+    ycor = ymin and xcor > median-xcor - sectioning-value and xcor < median-xcor + sectioning-value [
       set posi "b"
     ]
     ycor = ymin [
       set posi "lrc"
     ]
-    ycor = ymax and xcor >= xmin + adjust and xcor < (median [xcor] of atoms) - round (len / 4 ) + adjust [
+    ycor = ymax and xcor >= xmin + even-offset-adjust and xcor < median-xcor - sectioning-value + even-offset-adjust [
       set posi "ulc"
     ]
-    ycor = ymax and xcor >(median [xcor] of atoms) - round (len / 4 ) + adjust and xcor < (median [xcor] of atoms) + round (len / 4 ) + adjust [
+    ycor = ymax and xcor > median-xcor - sectioning-value + even-offset-adjust and xcor < median-xcor + sectioning-value + even-offset-adjust [
       set posi "t"
     ]
     ycor = ymax [
       set posi "urc"
     ]
-    xcor = xmin or xcor = xmin + (1 / 2) and ycor < ymax and ycor >= (median [ycor] of atoms) [
+    xcor = xmin or xcor = xmin + (1 / 2) and ycor < ymax and ycor >= median-ycor [
       set posi "ul"
     ]
-    xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < (median [ycor] of atoms) [
+    xcor = xmin or xcor = xmin + (1 / 2) and ycor > ymin and ycor < median-ycor [
       set posi "ll"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= (median [ycor] of atoms) [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor < ymax and ycor >= median-ycor [
       set posi "ur"
     ]
-    xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < (median [ycor] of atoms) [
+    xcor = xmax or xcor = xmax - (1 / 2) and ycor > ymin and ycor < median-ycor [
       set posi "lr"
     ]
     [set posi "body"]
@@ -132,9 +130,8 @@ to setup-atoms
   ]
 
   if create-dislocation? [
-    let curr-y-cor median [ycor] of atoms
-    let curr-x-cor median [xcor] of atoms
-    let iter-num 1
+    let curr-y-cor median-ycor
+    let curr-x-cor median-xcor
     while [ curr-y-cor <= ceiling (ymax) ] [
       ask atoms with [xcor <= curr-x-cor + x-dist * .75
         and xcor >= curr-x-cor
@@ -142,7 +139,6 @@ to setup-atoms
         and ycor >= curr-y-cor ] [ die ]
       set curr-y-cor curr-y-cor + y-dist
       set curr-x-cor curr-x-cor - x-dist / 2
-      set iter-num iter-num + 1
     ]
    ]
 end
@@ -151,21 +147,15 @@ to setup-links
   ask atoms [
     if diagonal-right-links [
       set heading 330
-      if any? atoms in-cone cone-check-dist 15 [
-        create-links-with other atoms in-cone cone-check-dist 15
-       ]
+      link-with-atoms-in-cone-setup
       ]
     if diagonal-left-links [
       set heading 30
-      if any? atoms in-cone cone-check-dist 15 [
-        create-links-with other atoms in-cone cone-check-dist 15
-       ]
+      link-with-atoms-in-cone-setup
       ]
     if horizontal-links [
       set heading 90
-      if any? atoms in-cone cone-check-dist 15 [
-        create-links-with other atoms in-cone cone-check-dist 15
-       ]
+      link-with-atoms-in-cone-setup
      ]
   ]
   ask links [
@@ -174,20 +164,27 @@ to setup-links
   ]
 end
 
+to link-with-atoms-in-cone-setup
+  if any? atoms in-cone cone-check-dist 15 [
+        create-links-with other atoms in-cone cone-check-dist 15
+       ]
+end
+
 to setup-force-arrows
   ifelse force-mode = "Shear" [
-  ;create-force-arrows num-atoms-per-row + ceiling ( num-atoms-per-row / 2 ) - 1[
-  create-force-arrows atoms-per-row + ceiling ( atoms-per-column / 2 ) - 1[
-    set shape "arrow"
-    set color white ]
+    set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
+    set f-app-vert-per-atom ((f-app-vert / 100) / atoms-per-row)
+    create-force-arrows atoms-per-row + ceiling ( atoms-per-column / 2 ) - 1 [
+      set shape "arrow"
+      set color white ]
 
     ask atoms with [posi = "ulc" or posi = "t" or posi = "urc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size (f-app-vert / atoms-per-row) * 2
-        ;set label f-app-vert / atoms-per-row
+        set size f-app-vert-per-atom * 100 * 2
+        set label precision (f-app-vert-per-atom * 100 ) 3
         face myself
       ]
     ]
@@ -196,8 +193,8 @@ to setup-force-arrows
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
         set my-atom [who] of myself
-        set size sqrt( (f-app / (ceiling ( atoms-per-column / 2 ) - 1)) ) * 2
-       ; set label f-app / (ceiling ( atoms-per-column / 2 ) - 1)
+        set size sqrt( f-app-per-atom ) * 2
+        set label precision f-app-per-atom 3
         face myself
       ]
     ]
@@ -206,19 +203,21 @@ to setup-force-arrows
     ]
   ]
   [
-    ;create-force-arrows 2 * num-atoms-per-row + count atoms with
-    set vert-force-count count atoms with [posi = "urc" or posi = "lrc" or posi = "ulc" or posi = "llc" ]
-    create-force-arrows 2 * atoms-per-column + vert-force-count - 4 [
-    set shape "arrow"
-    set color white ]
+    let vert-force-count count atoms with [posi = "urc" or posi = "lrc" or posi = "ulc" or posi = "llc" ]
+    set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
+    set f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
+
+    create-force-arrows 2 * atoms-per-column - 4 + vert-force-count [
+      set shape "arrow"
+      set color white ]
 
     ask atoms with [posi = "ulc" or posi = "urc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size (f-app-vert / vert-force-count) * 2
-       ; set label f-app-vert / vert-force-count
+        set size f-app-vert-per-atom * 100 * 2
+        set label precision (f-app-vert-per-atom * 100) 3
         face myself
       ]
     ]
@@ -227,8 +226,8 @@ to setup-force-arrows
         set xcor [xcor] of myself
         set ycor [ycor] of myself - 2
         set my-atom [who] of myself
-        set size (f-app-vert / vert-force-count) * 2
-       ; set label f-app-vert / vert-force-count
+        set size f-app-vert-per-atom * 100 * 2
+        set label precision (f-app-vert-per-atom * 100) 3
         face myself
       ]
     ]
@@ -236,8 +235,8 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
-        set size sqrt( (f-app / (2 * atoms-per-column - 4)))  * 2
-       ; set label f-app / (2 * atoms-per-column - 4)
+        set size sqrt(f-app-per-atom) * 2
+        set label precision f-app 3
         set my-atom [who] of myself
         face myself
         rt 180
@@ -247,8 +246,8 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself + 2
         set ycor [ycor] of myself
-        set size sqrt( (f-app / (2 * atoms-per-column - 4)) ) * 2
-        ;set label f-app / (2 * atoms-per-column - 4)
+        set size sqrt(f-app-per-atom) * 2
+        set label precision f-app 3
         set my-atom [who] of myself
         face myself
         rt 180
@@ -275,7 +274,7 @@ end
 
 to go
   control-temp
-  if crystal-view != "atoms-only" [
+  if any? links [
     ask links [die]
   ]
   ask atoms [
@@ -293,7 +292,7 @@ to go
   update-plots
 end
 
-to update-force-and-velocity  ; atom procedure
+to update-force-and-velocity
   let new-fx 0
   let new-fy 0
   let total-force 0
@@ -333,31 +332,28 @@ to update-force-and-velocity  ; atom procedure
 
     if diagonal-right-links [
       set heading 330
-      let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
-       if any? in-cone-atoms [
-        create-link-with min-one-of in-cone-atoms [distance myself]
-       ]
+      link-with-atoms-in-cone in-radius-atoms
       ]
     if diagonal-left-links [
       set heading 30
-      let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
-       if any? in-cone-atoms [
-        create-link-with min-one-of in-cone-atoms [distance myself]
-       ]
+      link-with-atoms-in-cone in-radius-atoms
       ]
     if horizontal-links [
       set heading 90
-      let in-cone-atoms (in-radius-atoms in-cone cone-check-dist 60)
-       if any? in-cone-atoms [
-        create-link-with min-one-of in-cone-atoms [distance myself]
-       ]
+      link-with-atoms-in-cone in-radius-atoms
       ]
+end
+
+to link-with-atoms-in-cone [atom-set]
+  let in-cone-atoms (atom-set in-cone cone-check-dist 60)
+    if any? in-cone-atoms [
+      create-link-with min-one-of in-cone-atoms [distance myself]
+    ]
 end
 
 to-report report-new-force [ pos f-gen ]
   (ifelse force-mode = "Shear" [
-      let f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
-      let f-app-vert-per-atom ((f-app-vert / 100) / atoms-per-row)
+
      (ifelse pos = "ul" [
        report f-gen + f-app-per-atom
       ]
@@ -366,8 +362,6 @@ to-report report-new-force [ pos f-gen ]
       ])
    ]
   force-mode = "Tension" [
-        let f-app-per-atom  f-app / (2 * atoms-per-column - 4)
-        let f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
      (ifelse pos = "ul" or pos = "ll" [
        report f-gen - f-app-per-atom
       ]
@@ -395,17 +389,15 @@ to move  ; atom procedure, uses velocity-verlet algorithm
         (ifelse posi = "ul" [
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself - 2
-
-
-            ;set label f-app / num-atoms
+            set size sqrt( f-app-per-atom ) * 2
+            set label precision f-app-per-atom 3
           ]
         ]
         posi = "ulc" or posi = "t" or posi = "urc" [
             ask force-arrows with [my-atom = [who] of myself] [
               set xcor [xcor] of myself
-
-            set size (f-app-vert / atoms-per-row) * 2
-              ;set label f-app-vert / num-atoms
+              set size f-app-vert-per-atom * 100 * 2
+              set label precision (f-app-vert-per-atom * 100 ) 3
           ]
         ])
         if xcor > max-pxcor [
@@ -423,32 +415,32 @@ to move  ; atom procedure, uses velocity-verlet algorithm
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself - 2
             set ycor [ycor] of myself
-            set size sqrt( (f-app / num-atoms) ) * 2
-            ;set label f-app / num-atoms
+            set size sqrt(f-app-per-atom) * 2
+            set label precision f-app 3
           ]
         ]
         posi = "ulc" or posi = "urc" [
             ask force-arrows with [my-atom = [who] of myself] [
               set ycor [ycor] of myself + 2
               set xcor [xcor] of myself
-              set size (f-app-vert / num-atoms) * 2
-              ;set label f-app-vert / num-atoms
+              set size f-app-vert-per-atom * 100 * 2
+              set label precision (f-app-vert-per-atom * 100) 3
           ]
         ]
         posi = "ur" or posi = "lr" [
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself + 2
             set ycor [ycor] of myself
-            set size sqrt( (f-app / num-atoms) ) * 2
-            ;set label f-app / num-atoms
+            set size sqrt(f-app-per-atom) * 2
+            set label precision f-app 3
           ]
         ]
         posi = "llc" or posi = "lrc" [
            ask force-arrows with [my-atom = [who] of myself] [
              set ycor [ycor] of myself - 2
              set xcor [xcor] of myself
-             set size (f-app-vert / num-atoms) * 2
-             ;set label f-app-vert / num-atoms
+             set size f-app-vert-per-atom * 100 * 2
+             set label precision (f-app-vert-per-atom * 100) 3
           ]
         ])
       if xcor > max-pxcor or xcor < min-pycor [
@@ -585,7 +577,7 @@ f-app
 f-app
 0
 12
-4.7
+4.2
 .1
 1
 N
@@ -600,7 +592,7 @@ f-app-vert
 f-app-vert
 0
 8
-3.0
+2.2
 .1
 1
 cN
@@ -656,7 +648,7 @@ SWITCH
 134
 diagonal-left-links
 diagonal-left-links
-1
+0
 1
 -1000
 
@@ -695,7 +687,7 @@ atoms-per-column
 atoms-per-column
 5
 15
-9.0
+10.0
 1
 1
 NIL
