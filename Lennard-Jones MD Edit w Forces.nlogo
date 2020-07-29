@@ -4,13 +4,14 @@ breed [force-arrows force-arrow]
 atoms-own [
   fx     ; x-component of force vector
   fy     ; y-component of force vector
-;  prev-x ; possibly switch to regular verlet - faster, lower error
-;  prev-y
+  prev-x
+  prev-y
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
+  PotE
 ]
 
 force-arrows-own [
@@ -30,6 +31,8 @@ globals [
   f-app-per-atom
   f-app-vert-per-atom
   vert-force-count
+  new-fx
+  new-fy
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -42,10 +45,10 @@ to setup
     set diameter .6 ]
     [set diameter .9]
   set r-min 1
-  set eps .05 ;  1
+  set eps .07 ;.1 ;  1
   set sigma .907 ;; .89090
   set cutoff-dist 5 * r-min
-  set time-step .02
+  set time-step .03 ;.03
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms atoms-per-row * atoms-per-column
@@ -133,6 +136,11 @@ to setup-atoms
     [set posi "body"])
   ]
 
+  ask atoms [
+    set prev-x xcor
+    set prev-y ycor
+  ]
+
   if create-dislocation? [
     let curr-y-cor median-ycor
     let curr-x-cor median-xcor
@@ -189,7 +197,6 @@ to setup-force-arrows
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
         set size sqrt(f-app-vert-per-atom * 100)
-        ;set label precision (f-app-vert-per-atom * 100 ) 3
         face myself
       ]
     ]
@@ -199,7 +206,6 @@ to setup-force-arrows
         set ycor [ycor] of myself
         set my-atom [who] of myself
         set size sqrt(f-app-per-atom)
-        ;set label precision f-app-per-atom 3
         face myself
       ]
     ]
@@ -220,7 +226,6 @@ to setup-force-arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set my-atom [who] of myself
         set size sqrt(f-app-vert-per-atom * 100)
-        ;set label precision (f-app-vert-per-atom * 100) 3
         set xcor [xcor] of myself
         ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
           set ycor [ycor] of myself + 2
@@ -232,7 +237,6 @@ to setup-force-arrows
     ask atoms with [posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set size sqrt(f-app-per-atom)
-        ;set label precision f-app 3
         set my-atom [who] of myself
         set ycor [ycor] of myself
         ifelse [posi] of myself = "ul" or [posi] of myself = "ll" [
@@ -244,7 +248,6 @@ to setup-force-arrows
       ]
     ]
   ]
-  ;ask force-arrows [set label-color red]
 end
 
 to init-velocity
@@ -264,10 +267,13 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  control-temp
+  ;control-temp
   if any? links [
     ask links [die]
   ]
+;  ask atoms [
+;    move
+;  ]
   ask atoms [
     update-force-and-velocity
   ]
@@ -283,14 +289,100 @@ to go
   update-plots
 end
 
+to move  ; atom procedure, uses velocity-verlet algorithm
+    ifelse force-mode = "Shear" [
+      if posi != "ll" and posi != "lr" [
+;        let temp-x xcor
+;        let temp-y ycor
+;        set xcor velocity-verlet-pos xcor vx (fx / mass)
+;        set ycor velocity-verlet-pos ycor vy (fy / mass)
+;        set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+;        set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+;        set fx new-fx
+;        set fy new-fy
+;        set vx (xcor - temp-x) / time-step
+;        set vy (ycor - temp-x) / time-step
+        let new-xcor verlet-pos xcor prev-x fx
+        let new-ycor verlet-pos ycor prev-y fy
+        set vx (new-xcor - xcor) / time-step
+        set vy (new-ycor - ycor) / time-step
+        set prev-x xcor
+        set prev-y ycor
+        set xcor new-xcor
+        set ycor new-ycor
+        (ifelse posi = "ul" [
+          ask force-arrows with [my-atom = [who] of myself] [
+            set xcor [xcor] of myself - 2
+            set size sqrt( f-app-per-atom )
+          ]
+        ]
+        posi = "ulc" or posi = "t" or posi = "urc" [
+            ask force-arrows with [my-atom = [who] of myself] [
+              set xcor [xcor] of myself
+              set size sqrt(f-app-vert-per-atom * 100)
+          ]
+        ])
+        if xcor > max-pxcor [
+            if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
+              ask force-arrows with [my-atom = [who] of myself] [die]
+          ]
+         die
+        ]
+      ]
+    ]
+    [ ;; force-mode = "Tension"
+      set xcor velocity-verlet-pos xcor vx (fx / mass)
+      set ycor velocity-verlet-pos ycor vy (fy / mass)
+;      let new-xcor verlet-pos xcor prev-x fx
+;      let new-ycor verlet-pos ycor prev-y fy
+;      set vx (new-xcor - xcor) / time-step
+;      set vy (new-ycor - ycor) / time-step
+;      set prev-x xcor
+;      set prev-y ycor
+;      set xcor new-xcor
+;      set ycor new-ycor
+      (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
+          ask force-arrows with [my-atom = [who] of myself] [
+            set size sqrt(f-app-per-atom)
+            set ycor [ycor] of myself
+            ifelse [posi] of myself = "ul" or[posi] of myself = "ll" [
+              set xcor [xcor] of myself - 2
+            ]
+            [ set xcor [xcor] of myself + 2 ]
+          ]
+         ]
+        posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
+            ask force-arrows with [my-atom = [who] of myself] [
+              set size sqrt(f-app-vert-per-atom * 100)
+              set xcor [xcor] of myself
+              ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
+                set ycor [ycor] of myself + 2
+              ]
+              [ set ycor [ycor] of myself - 2 ]
+            ]
+          ])
+      if xcor > max-pxcor or xcor < min-pycor [
+        if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
+        ask force-arrows with [my-atom = [who] of myself] [die]
+      ]
+      die
+     ]
+   ]
+end
+
+
 to update-force-and-velocity
-  let new-fx 0
-  let new-fy 0
+;  let new-fx 0
+;  let new-fy 0
+  set new-fx 0
+  set new-fy 0
+  set PotE 0
   let total-force 0
   let in-radius-atoms (other atoms in-radius cutoff-dist)
   ask in-radius-atoms [
     let r distance myself
     let force LJ-force r
+    set PotE PotE + LJ-pot r
     set total-force total-force + abs(force)
     face myself
     set new-fx new-fx + (force * dx)
@@ -313,10 +405,12 @@ to update-force-and-velocity
         set new-fy report-new-force posi new-fy
       ])
    ])
-   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
-   set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+
+;   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+;   set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
    set fx new-fx
    set fy new-fy
+
    if update-color? [
     set-color total-force
   ]
@@ -375,67 +469,6 @@ to-report LJ-force [ r ]
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 
-to move  ; atom procedure, uses velocity-verlet algorithm
-    ifelse force-mode = "Shear" [
-      if posi != "ll" and posi != "lr" [
-        set xcor velocity-verlet-pos xcor vx fx
-        set ycor velocity-verlet-pos ycor vy fy
-        (ifelse posi = "ul" [
-          ask force-arrows with [my-atom = [who] of myself] [
-            set xcor [xcor] of myself - 2
-            set size sqrt( f-app-per-atom )
-            ;set label precision f-app-per-atom 3
-          ]
-        ]
-        posi = "ulc" or posi = "t" or posi = "urc" [
-            ask force-arrows with [my-atom = [who] of myself] [
-              set xcor [xcor] of myself
-              set size sqrt(f-app-vert-per-atom * 100)
-              ;set label precision (f-app-vert-per-atom * 100 ) 3
-          ]
-        ])
-        if xcor > max-pxcor [
-            if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
-              ask force-arrows with [my-atom = [who] of myself] [die]
-          ]
-         die
-        ]
-      ]
-    ]
-    [ ;; force-mode = "Tension"
-      set xcor velocity-verlet-pos xcor vx fx
-      set ycor velocity-verlet-pos ycor vy fy
-      (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
-          ask force-arrows with [my-atom = [who] of myself] [
-            set size sqrt(f-app-per-atom)
-            ;set label precision f-app 3
-            set ycor [ycor] of myself
-            ifelse [posi] of myself = "ul" or[posi] of myself = "ll" [
-              set xcor [xcor] of myself - 2
-            ]
-            [ set xcor [xcor] of myself + 2 ]
-          ]
-         ]
-        posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
-            ask force-arrows with [my-atom = [who] of myself] [
-              set size sqrt(f-app-vert-per-atom * 100)
-              ;set label precision (f-app-vert-per-atom * 100) 3
-              set xcor [xcor] of myself
-              ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
-                set ycor [ycor] of myself + 2
-              ]
-              [ set ycor [ycor] of myself - 2 ]
-            ]
-          ])
-      if xcor > max-pxcor or xcor < min-pycor [
-        if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
-        ask force-arrows with [my-atom = [who] of myself] [die]
-      ]
-      die
-     ]
-   ]
-end
-
 to control-temp
   let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
   let target-v-avg sqrt-2-kb-over-m * sqrt system-temp
@@ -455,6 +488,10 @@ to-report velocity-verlet-velocity [v a new-a]  ; position and velocity
   report v + (1 / 2) * (new-a + a) * time-step
 end
 
+to-report verlet-pos [x px new-a]
+  report (2 * x) - px + new-a * (time-step ^ 2)
+end
+
 to set-color [v]
   set color scale-color blue sqrt(v) -.3 1.4
 end
@@ -464,7 +501,10 @@ to color-links [len]
     len > 1.018073 [set color scale-color yellow sqrt (len - 1.018073) -.05 .35] ;; equilibrium bond length
     [set color gray]
     )
-  set thickness .25
+end
+
+to-report LJ-pot [r]
+  report 4 * eps * ((sigma / r) ^ 12 - (sigma / r) ^ 6)
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -536,7 +576,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension"
-1
+0
 
 SLIDER
 14
@@ -547,7 +587,7 @@ system-temp
 system-temp
 0
 .75
-0.36
+0.0
 .01
 1
 NIL
@@ -562,7 +602,7 @@ f-app
 f-app
 0
 12
-3.4
+0.0
 .1
 1
 N
@@ -577,7 +617,7 @@ f-app-vert
 f-app-vert
 0
 8
-2.0
+0.0
 .1
 1
 cN
@@ -590,7 +630,7 @@ SWITCH
 156
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -613,7 +653,7 @@ CHOOSER
 crystal-view
 crystal-view
 "large-atoms" "small-atoms" "hide-atoms"
-2
+1
 
 SWITCH
 733
@@ -657,7 +697,7 @@ atoms-per-row
 atoms-per-row
 5
 15
-12.0
+10.0
 1
 1
 NIL
@@ -672,11 +712,68 @@ atoms-per-column
 atoms-per-column
 5
 15
-13.0
+10.0
 1
 1
 NIL
 HORIZONTAL
+
+PLOT
+749
+200
+949
+350
+KE + PE
+NIL
+NIL
+0.0
+100.0
+-18.28
+-18.27
+false
+false
+"" ""
+PENS
+"default" 0.01 0 -16777216 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")] + sum [PotE] of atoms "
+"pen-1" 0.01 0 -2674135 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")] + sum [abs(PotE)] of atoms "
+
+PLOT
+754
+394
+954
+544
+ke
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 0.1 0 -16777216 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms "
+"pen-1" 1.0 0 -7500403 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [ posi = \"ll\" or posi = \"lr\"]"
+"pen-2" 1.0 0 -2674135 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")]"
+
+PLOT
+1031
+388
+1231
+538
+pe
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 0.1 0 -16777216 true "" "plot sum [PotE] of atoms"
 
 @#$#@#$#@
 ## WHAT IS IT?
