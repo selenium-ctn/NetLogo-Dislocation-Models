@@ -12,6 +12,8 @@ atoms-own [
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
   PotE
+  calc-vx
+  calc-vy
 ]
 
 force-arrows-own [
@@ -48,7 +50,7 @@ to setup
   set eps .07 ;.1 ;  1
   set sigma .907 ;; .89090
   set cutoff-dist 5 * r-min
-  set time-step .03 ;.03
+  set time-step .05 ;.03 ; .3 max
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms atoms-per-row * atoms-per-column
@@ -267,24 +269,24 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  ;control-temp
+  control-temp
   if any? links [
     ask links [die]
-  ]
-;  ask atoms [
-;    move
-;  ]
-  ask atoms [
-    update-force-and-velocity
   ]
   ask atoms [
     move
   ]
-  if any? links [
-    ask links [
-      set thickness .25
-      color-links link-length]
+  ask atoms [
+    update-force-and-velocity
   ]
+;  ask atoms [
+;    move
+;  ]
+;  if any? links [
+;    ask links [
+;;      set thickness .25
+;      color-links link-length]
+;  ]
   tick-advance time-step
   update-plots
 end
@@ -294,22 +296,20 @@ to move  ; atom procedure, uses velocity-verlet algorithm
       if posi != "ll" and posi != "lr" [
 ;        let temp-x xcor
 ;        let temp-y ycor
-;        set xcor velocity-verlet-pos xcor vx (fx / mass)
-;        set ycor velocity-verlet-pos ycor vy (fy / mass)
-;        set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
-;        set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+        set xcor velocity-verlet-pos xcor vx (fx / mass)
+        set ycor velocity-verlet-pos ycor vy (fy / mass)
 ;        set fx new-fx
 ;        set fy new-fy
 ;        set vx (xcor - temp-x) / time-step
 ;        set vy (ycor - temp-x) / time-step
-        let new-xcor verlet-pos xcor prev-x fx
-        let new-ycor verlet-pos ycor prev-y fy
-        set vx (new-xcor - xcor) / time-step
-        set vy (new-ycor - ycor) / time-step
-        set prev-x xcor
-        set prev-y ycor
-        set xcor new-xcor
-        set ycor new-ycor
+;        let new-xcor verlet-pos xcor prev-x fx
+;        let new-ycor verlet-pos ycor prev-y fy
+;        set vx (new-xcor - xcor) / time-step
+;        set vy (new-ycor - ycor) / time-step
+;        set prev-x xcor
+;        set prev-y ycor
+;        set xcor new-xcor
+;        set ycor new-ycor
         (ifelse posi = "ul" [
           ask force-arrows with [my-atom = [who] of myself] [
             set xcor [xcor] of myself - 2
@@ -331,16 +331,22 @@ to move  ; atom procedure, uses velocity-verlet algorithm
       ]
     ]
     [ ;; force-mode = "Tension"
+;       let temp-x xcor
+;       let temp-y ycor
       set xcor velocity-verlet-pos xcor vx (fx / mass)
       set ycor velocity-verlet-pos ycor vy (fy / mass)
+
+;      set vx (xcor - prev-x) / time-step
+;      set vy (ycor - prev-y) / time-step
 ;      let new-xcor verlet-pos xcor prev-x fx
 ;      let new-ycor verlet-pos ycor prev-y fy
-;      set vx (new-xcor - xcor) / time-step
-;      set vy (new-ycor - ycor) / time-step
+
 ;      set prev-x xcor
 ;      set prev-y ycor
 ;      set xcor new-xcor
 ;      set ycor new-ycor
+;        set calc-vx (xcor - temp-x) / time-step
+;        set calc-vy (ycor - temp-x) / time-step
       (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
           ask force-arrows with [my-atom = [who] of myself] [
             set size sqrt(f-app-per-atom)
@@ -406,10 +412,10 @@ to update-force-and-velocity
       ])
    ])
 
-;   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
-;   set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+   set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
    set fx new-fx
-;   set fy new-fy
+   set fy new-fy
 
    if update-color? [
     set-color total-force
@@ -427,6 +433,11 @@ to update-force-and-velocity
       set heading 90
       link-with-atoms-in-cone in-radius-atoms
       ]
+  if any? links [
+   ask links [
+;      set thickness .25
+      color-links link-length]
+  ]
 end
 
 to link-with-atoms-in-cone [atom-set]
@@ -497,10 +508,38 @@ to set-color [v]
 end
 
 to color-links [len]
-  (ifelse len < .995 [set color scale-color red sqrt (.995 - len) -.05 .35]
-    len > 1.018073 [set color scale-color yellow sqrt (len - 1.018073) -.05 .35] ;; equilibrium bond length
-    [set color gray]
+  (ifelse len < .995 [
+    set color scale-color red sqrt (.995 - len) -.05 .35
+    set thickness (.25 - (.995 - len))]
+
+    len > 1.018073 [
+      set color scale-color yellow sqrt (len - 1.018073) -.05 .35
+      set thickness (.25  (len - 1.018073))] ;; equilibrium bond length
+    [set color gray
+    set thickness .25 ]
     )
+
+;  (ifelse len < .995 [
+;    set color scale-color red sqrt (.995 - len) -.05 .35
+;    set thickness (.25 - ((.995 - len)) ^ 2 )]
+;
+;    len > 1.018073 [
+;      set color scale-color yellow sqrt (len - 1.018073) -.05 .35
+;      set thickness (.25 + (len - 1.018073) ^ 2)] ;; equilibrium bond length
+;    [set color gray
+;    set thickness .25 ]
+;    )
+
+;  (ifelse len < .995 [
+;    set color scale-color red sqrt (.995 - len) -.05 .35
+;    set thickness (.25 - sqrt((.995 - len)) )]
+;
+;    len > 1.018073 [
+;      set color scale-color yellow sqrt (len - 1.018073) -.05 .35
+;      set thickness (.25 + sqrt(len - 1.018073))] ;; equilibrium bond length
+;    [set color gray
+;    set thickness .25 ]
+;  )
 end
 
 to-report LJ-pot [r]
@@ -587,7 +626,7 @@ system-temp
 system-temp
 0
 .75
-0.0
+0.11
 .01
 1
 NIL
@@ -602,7 +641,7 @@ f-app
 f-app
 0
 12
-0.0
+3.1
 .1
 1
 N
@@ -653,7 +692,7 @@ CHOOSER
 crystal-view
 crystal-view
 "large-atoms" "small-atoms" "hide-atoms"
-1
+2
 
 SWITCH
 733
@@ -727,15 +766,17 @@ KE + PE
 NIL
 NIL
 0.0
-100.0
--18.28
--18.27
+30.0
+-20.173
+-20.167
 false
 false
 "" ""
 PENS
-"default" 0.01 0 -16777216 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")] + sum [PotE] of atoms "
-"pen-1" 0.01 0 -2674135 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")] + sum [abs(PotE)] of atoms "
+"default" 0.01 0 -16777216 true "" ";plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")] + sum [PotE] of atoms "
+"pen-1" 0.01 0 -2674135 true "" ";plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")] + sum [abs(PotE)] of atoms "
+"pen-2" 0.01 0 -7500403 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms + sum [PotE] of atoms "
+"pen-3" 0.01 0 -13840069 true "" ";plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms + sum [abs(PotE)] of atoms "
 
 PLOT
 754
@@ -774,6 +815,17 @@ false
 "" ""
 PENS
 "default" 0.1 0 -16777216 true "" "plot sum [PotE] of atoms"
+
+MONITOR
+52
+425
+154
+470
+max-v
+[ sqrt( vx ^ 2 + vy ^ 2 )] of max-one-of atoms [ sqrt( vx ^ 2 + vy ^ 2 ) ]
+6
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
