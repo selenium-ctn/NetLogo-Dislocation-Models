@@ -4,8 +4,10 @@ breed [force-arrows force-arrow]
 atoms-own [
   fx     ; x-component of force vector
   fy     ; y-component of force vector
+  fz
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
+  vz
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
@@ -42,16 +44,16 @@ to setup
 ;  ifelse lattice-view = "small-atoms" [
 ;    set diameter .6 ]
 ;    [set diameter .9]
-  set diameter 1
-  set eps .07
-  set sigma .907
-  set cutoff-dist 5
-  set time-step .05
+  set diameter .9
+  set eps .1
+  set sigma .91
+  set cutoff-dist 3
+  set time-step .07
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
-  set atoms-per-row 10
-  set atoms-per-column 10
-  set atoms-height 10
+  set atoms-per-row 7
+  set atoms-per-column 7
+  set atoms-height 7
   set num-atoms atoms-per-row * atoms-per-column * atoms-height
   setup-atoms
   ;setup-links
@@ -84,12 +86,16 @@ to setup-atoms
     let xpos_orig xpos
     let rnum 0 ; row number, starts at 0 for easy modulo division
     let pnum 0 ; plane number
+    let curr_color 5
     ask atoms [ ; setting up the HCP structure
-      if xpos >= (len * x-dist / 2)  [ ; condition for starting new row
+      if xpos >= (len * x-dist / 2) [ ; condition for starting new row
         set rnum rnum + 1
+        set color curr_color
+        set curr_color curr_color + 10
         set xpos (- len * x-dist / 2) + (rnum mod 2) * x-dist / 2
         set ypos ypos + y-dist
-        if ypos >= (width * y-dist / 2) [ ; condition for starting new plane
+        if ypos >= (width * y-dist / 2) - .00001 [ ; condition for starting new plane
+          set curr_color 5
           set pnum pnum + 1
           set ypos ypos_orig + y-offset * (pnum mod 2)
           set xpos xpos_orig + x-offset * (pnum mod 2)
@@ -132,9 +138,19 @@ to init-velocity ; initializes velocity for each atom based on the initial syste
                  ; velocity split between the x velocity and the y velocity
   let v-avg sqrt-2-kb-over-m * sqrt system-temp
   ask atoms [
-    let x-y-split random-float 1
-    set vx v-avg * x-y-split * positive-or-negative
-    set vy v-avg * (1 - x-y-split) * positive-or-negative]
+    let rand-1 random-float 1
+    let rand-2 random-float 1
+    let xyz-split-1 rand-1 / (rand-1 + rand-2)
+    let xyz-split-2 rand-2 / (rand-1 + rand-2)
+    if xyz-split-1 > xyz-split-2 [
+      let temp xyz-split-1
+      set xyz-split-1 xyz-split-2
+      set xyz-split-2 temp
+    ]
+    set vx v-avg * (xyz-split-1) * positive-or-negative
+    set vy v-avg * (xyz-split-2 - xyz-split-1) * positive-or-negative
+    set vz v-avg * (1 - xyz-split-2) * positive-or-negative
+  ]
 end
 
 to-report positive-or-negative
@@ -160,12 +176,13 @@ to go
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
-  let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
+  let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2 + vz ^ 2)] of atoms
   let target-v-avg sqrt-2-kb-over-m * sqrt system-temp
   if current-v-avg != 0 [
     ask atoms [
       set vx vx * (target-v-avg / current-v-avg)
       set vy vy * (target-v-avg / current-v-avg)
+      set vz vz * (target-v-avg / current-v-avg)
     ]
   ]
 end
@@ -173,6 +190,7 @@ end
 to move  ; atom procedure, uses velocity-verlet algorithm
   set xcor velocity-verlet-pos xcor vx (fx / mass)
   set ycor velocity-verlet-pos ycor vy (fy / mass)
+  set zcor velocity-verlet-pos zcor vz (fz / mass)
   if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
     die ; kills atoms when they move off the world
   ]
@@ -182,6 +200,7 @@ end
 to update-force-and-velocity-and-links
   let new-fx 0
   let new-fy 0
+  let new-fz 0
   let total-force 0
   let in-radius-atoms (other atoms in-radius cutoff-dist)
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
@@ -191,6 +210,7 @@ to update-force-and-velocity-and-links
     face myself
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
+    set new-fz new-fz + (force * dz)
     ]
 
 ;  ; adjusting the forces to account for any external applied forces
@@ -214,8 +234,10 @@ to update-force-and-velocity-and-links
    ; updating velocity and force
    set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
    set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+   set vz velocity-verlet-velocity vz (fz / mass) (new-fz / mass)
    set fx new-fx
    set fy new-fy
+   set fz new-fz
 
 ;   if update-color? [ ; updating atom color
 ;    set-color total-force
@@ -291,7 +313,7 @@ to-report velocity-verlet-velocity [v a new-a]  ; velocity, acceleration, new ac
 end
 
 to set-color [v]
-  set color scale-color blue sqrt(v) -.3 1.4
+  set color scale-color blue sqrt(v) -.3 3
 end
 
 to color-links [len]
@@ -340,7 +362,7 @@ system-temp
 system-temp
 0
 .75
-0.16
+0.63
 .01
 1
 NIL
