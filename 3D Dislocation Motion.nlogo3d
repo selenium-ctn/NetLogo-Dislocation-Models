@@ -99,7 +99,7 @@ to setup-atoms
           set pnum pnum + 1
           set ypos ypos_orig + y-offset * (pnum mod 2)
           set xpos xpos_orig + x-offset * (pnum mod 2)
-          set rnum 0
+          set rnum 1 * (pnum mod 2)
         ]
       ]
       setxyz xpos ypos (z-dist * pnum)

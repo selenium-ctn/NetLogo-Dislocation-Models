@@ -88,7 +88,7 @@ to setup-atoms
   let xmin [xcor] of one-of atoms with-min [xcor]
   let median-xcor (median [xcor] of atoms)
   let median-ycor (median [ycor] of atoms)
-  let sectioning-value floor (len / 4 )
+  let sectioning-value  (len / 4 )
 
   ; this offset is necessary if there is an even number of atoms-per-column. Atom x-positions in the top row will not be
   ; the same as in in the bottom row, because the row will be shifted a little on account of the close packed structure
@@ -599,7 +599,7 @@ SWITCH
 156
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -666,7 +666,7 @@ atoms-per-row
 atoms-per-row
 5
 15
-9.0
+10.0
 1
 1
 NIL
@@ -681,7 +681,7 @@ atoms-per-column
 atoms-per-column
 5
 15
-7.0
+13.0
 1
 1
 NIL

@@ -46,7 +46,7 @@ to setup
 ;    [set diameter .9]
   set diameter .9
   set eps .1
-  set sigma .
+  set sigma .91
   set cutoff-dist 3
   set time-step .07
   set sqrt-2-kb-over-m (1 / 20)
@@ -99,7 +99,7 @@ to setup-atoms
           set pnum pnum + 1
           set ypos ypos_orig + y-offset * (pnum mod 2)
           set xpos xpos_orig + x-offset * (pnum mod 2)
-          set rnum 0
+          set rnum 1
         ]
       ]
       setxyz xpos ypos (z-dist * pnum)
