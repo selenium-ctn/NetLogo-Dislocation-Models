@@ -11,6 +11,9 @@ atoms-own [
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
+  pinned?  ; 0 = no, 1 = yes
+  force-1
+  force-2
 ]
 
 force-arrows-own [
@@ -90,7 +93,7 @@ to setup-atoms
     ask atoms [ ; setting up the HCP structure
       if xpos >= (len * x-dist / 2) [ ; condition for starting new row
         set rnum rnum + 1
-        set color curr_color
+        ;set color curr_color
         set curr_color curr_color + 10
         set xpos (- len * x-dist / 2) + (rnum mod 2) * x-dist / 2
         set ypos ypos + y-dist
@@ -99,13 +102,90 @@ to setup-atoms
           set pnum pnum + 1
           set ypos ypos_orig + y-offset * (pnum mod 2)
           set xpos xpos_orig + x-offset * (pnum mod 2)
-          set rnum 1
+          set rnum 1 * (pnum mod 2)
         ]
       ]
       setxyz xpos ypos (z-dist * pnum)
       set xpos xpos + x-dist
     ]
+
+   ; values used in assigning atom positions
+  let ymax [ycor] of one-of atoms with-max [ycor]
+  let xmax [xcor] of one-of atoms with-max [xcor]
+  let ymin [ycor] of one-of atoms with-min [ycor]
+  let xmin [xcor] of one-of atoms with-min [xcor]
+  let median-xcor (median [xcor] of atoms)
+  let median-ycor (median [ycor] of atoms)
+  let sectioning-value floor (len / 4 )
+
+  ; this offset is necessary if there is an even number of atoms-per-column. Atom x-positions in the top row will not be
+  ; the same as in in the bottom row, because the row will be shifted a little on account of the close packed structure
+  let even-offset-adjust 0
+  let odd-offset-adjust x-dist / 2
+  if atoms-per-column mod 2 = 0
+  [ set even-offset-adjust x-dist / 2
+    set odd-offset-adjust 0]
+
+  ask atoms [ ; assigning positions to the atoms
+    if ycor = ymin or ycor = ymax
+      or ycor = ymin + y-offset or ycor = ymax - y-offset
+      or xcor = xmin or xcor = xmax
+      or xcor = xmin + x-offset or xcor = xmax - x-offset and zcor < median [zcor] of atoms  [
+        set pinned? 1
+        set color red
+    ]
+    if xcor = xmin or xcor = xmin + x-offset and zcor >= median [zcor] of atoms [
+      (ifelse ycor <= median-ycor - (width / 5) [
+        set force-1 1
+        set color green
+      ]
+      [
+        set force-2 1
+        set color gray
+      ])
+    ]
+  ]
+
+
+
+;
+;      (ifelse xcor >= xmin and xcor < xmin + sectioning-value [
+;        set posi "llc"
+;       ]
+;       xcor < xmax - sectioning-value - x-dist / 2 and xcor > xmin + sectioning-value [
+;        set posi "b"
+;       ]
+;       [ set posi "lrc" ])
+;    ]
+;    ycor = ymax [
+;      (ifelse xcor >= xmin + even-offset-adjust and xcor < xmin + sectioning-value + even-offset-adjust - odd-offset-adjust  [
+;        set posi "ulc"
+;      ]
+;      xcor < xmax - sectioning-value - odd-offset-adjust and xcor > xmin + sectioning-value + even-offset-adjust [
+;        set posi "t"
+;      ]
+;      [ set posi "urc" ])
+;    ]
+;    xcor = xmin or xcor = xmin + (1 / 2) [
+;      (ifelse ycor < ymax and ycor >= median-ycor [
+;        set posi "ul"
+;      ]
+;      ycor > ymin and ycor < median-ycor [
+;        set posi "ll"
+;      ])
+;    ]
+;    xcor = xmax or xcor = xmax - (1 / 2) [
+;      (ifelse ycor < ymax and ycor >= median-ycor [
+;        set posi "ur"
+;      ]
+;      ycor > ymin and ycor < median-ycor [
+;        set posi "lr"
+;      ])
+;    ]
+;    [set posi "body"])
+;  ]
 end
+
 
 ;to setup-links ; sets up the initial links
 ;  ask atoms [
@@ -188,11 +268,13 @@ to control-temp ; this heats or cools the system based on the average temperatur
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
+  if pinned? = 0 [
   set xcor velocity-verlet-pos xcor vx (fx / mass)
   set ycor velocity-verlet-pos ycor vy (fy / mass)
   set zcor velocity-verlet-pos zcor vz (fz / mass)
   if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
     die ; kills atoms when they move off the world
+  ]
   ]
 end
 
@@ -214,22 +296,9 @@ to update-force-and-velocity-and-links
     ]
 
 ;  ; adjusting the forces to account for any external applied forces
-;  (ifelse force-mode = "Shear" [
-;      (ifelse posi = "ul" [
-;        set new-fx report-new-force posi new-fx
-;      ]
-;      posi = "ulc" or posi = "t" or posi = "urc" [
-;        set new-fy report-new-force posi new-fy
-;      ])
-;   ]
-;  force-mode = "Tension" [
-;      (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
-;        set new-fx report-new-force posi new-fx
-;      ]
-;      posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
-;        set new-fy report-new-force posi new-fy
-;      ])
-;   ])
+   if force-1 = 1 [
+      set new-fx report-new-force posi new-fx
+    ]
 
    ; updating velocity and force
    set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
@@ -271,17 +340,12 @@ to link-with-atoms-in-cone [atom-set]
     ]
 end
 
-;to-report report-new-force [ pos f-gen ]
-;  (ifelse force-mode = "Shear" [
-;    set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
-;    set f-app-vert-per-atom ((f-app-vert / 100) / (atoms-per-row - f-disloc-adjust))
-;     (ifelse pos = "ul" [
-;       report f-gen + f-app-per-atom
-;      ]
-;      pos = "ulc" or pos = "t" or pos = "urc" [
-;        report f-gen - f-app-vert-per-atom
-;      ])
-;   ]
+to-report report-new-force [ pos f-gen ]
+    set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
+    ;set f-app-vert-per-atom ((f-app-vert / 100) / (atoms-per-row - f-disloc-adjust))
+     if force-1 = 1 [
+       report f-gen + f-app-per-atom
+      ]
 ;  force-mode = "Tension" [
 ;    set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
 ;    set f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
@@ -298,7 +362,7 @@ end
 ;       report f-gen + f-app-vert-per-atom
 ;     ])
 ;    ])
-;end
+end
 
 to-report LJ-force [ r ]
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
@@ -401,6 +465,21 @@ NIL
 NIL
 NIL
 0
+
+SLIDER
+27
+74
+199
+107
+f-app
+f-app
+0
+50
+0.0
+.1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
