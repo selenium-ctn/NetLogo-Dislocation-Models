@@ -14,6 +14,9 @@ atoms-own [
   pinned?  ; 0 = no, 1 = yes
   force-1
   force-2
+  force-3
+  force-top
+  force-side
 ]
 
 force-arrows-own [
@@ -29,7 +32,8 @@ globals [
   sqrt-2-kb-over-m  ; constant
   cone-check-dist ; each atom links with neighbors within this distance
   num-atoms ; total number of atoms in system
-  f-app-per-atom ; The magnitude of force felt by each individual atom that f-app is directly acting on
+  f-app-1-per-atom ; The magnitude of force felt by each individual atom that f-app is directly acting on
+  f-app-2-per-atom
   f-app-vert-per-atom ; The magnitude of force felt by each individual atom that the f-app-vert is directly acting on
   vert-force-count ; the number of atoms experiencing f-app-vert in the tension force-mode
   f-disloc-adjust ; subtracts an atom from the number of atoms experiencing f-app-vert if there is a dislocation (relevant for shear calculations only)
@@ -112,6 +116,7 @@ to setup-atoms
    ; values used in assigning atom positions
   let ymax [ycor] of one-of atoms with-max [ycor]
   let xmax [xcor] of one-of atoms with-max [xcor]
+  let zmax [zcor] of one-of atoms with-max [zcor]
   let ymin [ycor] of one-of atoms with-min [ycor]
   let xmin [xcor] of one-of atoms with-min [xcor]
   let median-xcor (median [xcor] of atoms)
@@ -137,12 +142,21 @@ to setup-atoms
     if xcor = xmin or xcor = xmin + x-offset and zcor >= median [zcor] of atoms [
       (ifelse ycor <= median-ycor - (width / 5) [
         set force-1 1
+        set force-3 1
         set color green
       ]
       [
         set force-2 1
+        set force-3 1
         set color gray
       ])
+    ]
+    if zcor = zmax [
+      set force-top 1
+    ]
+    if ycor = ymin or ycor = ymax
+      or ycor = ymin + y-offset or ycor = ymax - y-offset and zcor >= median [zcor] of atoms [
+      set force-side 1
     ]
   ]
 
@@ -296,9 +310,24 @@ to update-force-and-velocity-and-links
     ]
 
 ;  ; adjusting the forces to account for any external applied forces
-   if force-1 = 1 [
-      set new-fx report-new-force posi new-fx
+   (ifelse force-3 = 1 and f-3? [
+      set new-fx report-new-force 3 "X" new-fx
     ]
+    force-1 = 1 [
+      set new-fx report-new-force 1 "X" new-fx
+      ;set new-fy report-new-force "Y" new-fy
+      ;set new-fz report-new-force "Z" new-fz
+    ]
+    force-2 = 1 [
+      set new-fx report-new-force 2 "X" new-fx
+    ])
+
+    if force-top = 1 [
+      set new-fz report-new-force "top" "Z" new-fz
+  ]
+    if force-side = 1 [
+      set new-fy report-new-force "side" "Y" new-fy
+  ]
 
    ; updating velocity and force
    set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
@@ -340,12 +369,33 @@ to link-with-atoms-in-cone [atom-set]
     ]
 end
 
-to-report report-new-force [ pos f-gen ]
-    set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
+to-report report-new-force [tag dir f-gen ]
+    set f-app-1-per-atom f-app-1 / (ceiling ( atoms-per-column / 2 ) - 1)
+    set f-app-2-per-atom f-app-2 / (ceiling ( atoms-per-column / 2 ) - 1)
     ;set f-app-vert-per-atom ((f-app-vert / 100) / (atoms-per-row - f-disloc-adjust))
-     if force-1 = 1 [
-       report f-gen + f-app-per-atom
+
+  if tag = 3 [
+    report f-gen + f-app-1-per-atom
+  ]
+
+     (ifelse force-1 = 1 and dir = "X" [
+       report f-gen + f-app-1-per-atom
       ]
+      force-1 = 1 and dir = "Y" [
+       report f-gen + .25
+      ]
+      force-1 = 1 and dir = "Z" [
+       report f-gen - .25
+    ])
+     if force-2 = 1 [
+       report f-gen + f-app-2-per-atom
+     ]
+     if force-top = 1 [
+       report f-gen - . ; .25
+  ]
+  if force-side = 1 [
+      report f-gen + 1 ; .25
+  ]
 ;  force-mode = "Tension" [
 ;    set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
 ;    set f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
@@ -426,7 +476,7 @@ system-temp
 system-temp
 0
 .75
-0.63
+0.37
 .01
 1
 NIL
@@ -467,12 +517,27 @@ NIL
 0
 
 SLIDER
+23
+66
+195
+99
+f-app-1
+f-app-1
+0
+50
+10.2
+.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
 27
-74
+120
 199
-107
-f-app
-f-app
+153
+f-app-2
+f-app-2
 0
 50
 0.0
@@ -480,6 +545,17 @@ f-app
 1
 NIL
 HORIZONTAL
+
+SWITCH
+32
+181
+135
+214
+f-3?
+f-3?
+1
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
