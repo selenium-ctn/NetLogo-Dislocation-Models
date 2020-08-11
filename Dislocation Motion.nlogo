@@ -146,13 +146,29 @@ to setup-atoms
         and xcor >= curr-x-cor
         and ycor <= curr-y-cor + y-dist * .75
         and ycor >= curr-y-cor ] [ die ]
-      ask atoms with [ xcor > curr-x-cor + x-dist * .75 and ycor > curr-y-cor + y-dist * .75 ] [ set xcor xcor - it-num * .1
+      ask atoms with [ xcor >= curr-x-cor and ycor <= curr-y-cor + y-dist * .75 and ycor >= curr-y-cor ] [ set xcor xcor - .05 * it-num]
+      ask atoms with [ xcor < curr-x-cor and ycor <= curr-y-cor + y-dist * .75 and ycor >= curr-y-cor ] [ set xcor xcor + .05 * it-num]
       set curr-y-cor curr-y-cor + y-dist
       set curr-x-cor curr-x-cor - x-dist / 2
       set it-num it-num + 1
     ]
     set f-disloc-adjust 1
    ]
+
+;  set f-disloc-adjust 0
+;  if create-dislocation? [ ; creating the dislocation
+;    let curr-y-cor median-ycor
+;    let curr-x-cor median-xcor
+;    while [ curr-y-cor <= ceiling (ymax) ] [
+;      ask atoms with [xcor <= curr-x-cor + x-dist * .75
+;        and xcor >= curr-x-cor
+;        and ycor <= curr-y-cor + y-dist * .75
+;        and ycor >= curr-y-cor ] [ die ]
+;      set curr-y-cor curr-y-cor + y-dist
+;      set curr-x-cor curr-x-cor - x-dist / 2
+;    ]
+;    set f-disloc-adjust 1
+;   ]
 end
 
 to setup-links ; sets up the initial links
@@ -177,8 +193,8 @@ to setup-links ; sets up the initial links
 end
 
 to link-with-atoms-in-cone-setup
-  if any? atoms in-cone cone-check-dist 15 [
-        create-links-with other atoms in-cone cone-check-dist 15
+  if any? atoms in-cone cone-check-dist 45 [
+        create-links-with other atoms in-cone cone-check-dist 45
        ]
 end
 
@@ -404,6 +420,9 @@ to update-force-and-velocity-and-links
       ]
       posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
         set new-fy report-new-force posi new-fy
+      ]
+      bulk-force? and posi = "t" or posi = "b" [
+        set new-fy report-new-force posi new-fy
       ])
    ])
 
@@ -465,10 +484,10 @@ to-report report-new-force [ pos f-gen ]
      pos = "ur" or pos = "lr" [
        report f-gen + f-app-per-atom
       ]
-     pos = "ulc" or pos = "urc"  [
+     pos = "ulc" or pos = "urc"  or pos = "t" [
        report f-gen - f-app-vert-per-atom
       ]
-     pos = "llc" or pos = "lrc"  [
+     pos = "llc" or pos = "lrc" or pos = "b" [
        report f-gen + f-app-vert-per-atom
      ])
     ])
@@ -501,11 +520,11 @@ end
 GRAPHICS-WINDOW
 192
 10
-725
-544
+820
+639
 -1
 -1
-25.0
+20.0
 1
 10
 1
@@ -515,10 +534,10 @@ GRAPHICS-WINDOW
 1
 1
 1
--10
-10
--10
-10
+-15
+15
+-15
+15
 1
 1
 1
@@ -578,7 +597,7 @@ system-temp
 system-temp
 0
 .75
-0.15
+0.02
 .01
 1
 NIL
@@ -593,7 +612,7 @@ f-app
 f-app
 0
 12
-3.8
+0.0
 .1
 1
 N
@@ -607,8 +626,8 @@ SLIDER
 f-app-vert
 f-app-vert
 0
-8
-1.9
+200
+123.6
 .1
 1
 cN
@@ -621,15 +640,15 @@ SWITCH
 156
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
 SWITCH
-733
-19
-865
-52
+832
+20
+964
+53
 update-color?
 update-color?
 0
@@ -647,10 +666,10 @@ lattice-view
 1
 
 SWITCH
-736
-61
-895
-94
+835
+62
+994
+95
 diagonal-right-links
 diagonal-right-links
 0
@@ -658,10 +677,10 @@ diagonal-right-links
 -1000
 
 SWITCH
-736
-101
-888
-134
+835
+102
+987
+135
 diagonal-left-links
 diagonal-left-links
 0
@@ -669,13 +688,13 @@ diagonal-left-links
 -1000
 
 SWITCH
-735
-139
-873
-172
+834
+140
+972
+173
 horizontal-links
 horizontal-links
-1
+0
 1
 -1000
 
@@ -687,8 +706,8 @@ SLIDER
 atoms-per-row
 atoms-per-row
 5
-15
-10.0
+25
+20.0
 1
 1
 NIL
@@ -702,18 +721,18 @@ SLIDER
 atoms-per-column
 atoms-per-column
 5
-15
-10.0
+25
+20.0
 1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-745
-198
-864
-243
+844
+199
+963
+244
 f-app-per-atom (N)
 f-app-per-atom
 3
@@ -721,15 +740,26 @@ f-app-per-atom
 11
 
 MONITOR
-744
-257
-896
-302
+843
+258
+995
+303
 f-app-vert-per-atom (cN)
 f-app-vert-per-atom * 100
 3
 1
 11
+
+SWITCH
+22
+438
+139
+471
+bulk-force?
+bulk-force?
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
