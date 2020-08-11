@@ -140,13 +140,16 @@ to setup-atoms
   if create-dislocation? [ ; creating the dislocation
     let curr-y-cor median-ycor
     let curr-x-cor median-xcor
+    let it-num 0
     while [ curr-y-cor <= ceiling (ymax) ] [
       ask atoms with [xcor <= curr-x-cor + x-dist * .75
         and xcor >= curr-x-cor
         and ycor <= curr-y-cor + y-dist * .75
         and ycor >= curr-y-cor ] [ die ]
+      ask atoms with [ xcor > curr-x-cor + x-dist * .75 and ycor > curr-y-cor + y-dist * .75 ] [ set xcor xcor - it-num * .1
       set curr-y-cor curr-y-cor + y-dist
       set curr-x-cor curr-x-cor - x-dist / 2
+      set it-num it-num + 1
     ]
     set f-disloc-adjust 1
    ]
