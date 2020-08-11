@@ -49,8 +49,8 @@ to setup
   set r-min 1
   set eps .07 ;.1 ;  1
   set sigma .907 ;; .89090
-  set cutoff-dist 5 * r-min
-  set time-step .1 ;.03 ; .3 max
+  set cutoff-dist 5 * r-min ;5
+  set time-step .15 ;.03 ; .3 max
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms atoms-per-row * atoms-per-column
@@ -549,11 +549,11 @@ end
 GRAPHICS-WINDOW
 192
 10
-725
-544
+815
+634
 -1
 -1
-25.0
+15.0
 1
 10
 1
@@ -563,10 +563,10 @@ GRAPHICS-WINDOW
 1
 1
 1
--10
-10
--10
-10
+-20
+20
+-20
+20
 1
 1
 1
@@ -674,10 +674,10 @@ create-dislocation?
 -1000
 
 SWITCH
-740
-19
-872
-52
+867
+38
+999
+71
 update-color?
 update-color?
 0
@@ -695,10 +695,10 @@ crystal-view
 1
 
 SWITCH
-733
-60
-892
-93
+860
+79
+1019
+112
 diagonal-right-links
 diagonal-right-links
 0
@@ -706,10 +706,10 @@ diagonal-right-links
 -1000
 
 SWITCH
-736
-101
-888
-134
+863
+120
+1015
+153
 diagonal-left-links
 diagonal-left-links
 1
@@ -717,10 +717,10 @@ diagonal-left-links
 -1000
 
 SWITCH
-744
-142
-882
-175
+871
+161
+1009
+194
 horizontal-links
 horizontal-links
 1
@@ -735,8 +735,8 @@ SLIDER
 atoms-per-row
 atoms-per-row
 5
-15
-10.0
+30
+22.0
 1
 1
 NIL
@@ -750,25 +750,25 @@ SLIDER
 atoms-per-column
 atoms-per-column
 5
-15
-10.0
+30
+22.0
 1
 1
 NIL
 HORIZONTAL
 
 PLOT
-749
-200
-949
-350
+876
+219
+1076
+369
 KE + PE
 NIL
 NIL
 0.0
-500.0
--20.173
--20.167
+200.0
+-106.535
+-106.51
 false
 false
 "" ""
@@ -779,10 +779,10 @@ PENS
 "pen-3" 0.01 0 -13840069 true "" ";plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms + sum [abs(PotE)] of atoms "
 
 PLOT
-754
-394
-954
-544
+881
+413
+1081
+563
 ke
 NIL
 NIL
@@ -799,10 +799,10 @@ PENS
 "pen-2" 1.0 0 -2674135 true "" "plot sum [0.5 * (vx ^ 2 + vy ^ 2)] of atoms with [not (posi = \"ll\" or posi = \"lr\")]"
 
 PLOT
-1031
-388
-1231
-538
+1158
+407
+1358
+557
 pe
 NIL
 NIL

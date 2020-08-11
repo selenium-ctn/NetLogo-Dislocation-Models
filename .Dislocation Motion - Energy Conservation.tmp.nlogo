@@ -50,7 +50,7 @@ to setup
   set eps .07 ;.1 ;  1
   set sigma .907 ;; .89090
   set cutoff-dist 5 * r-min ;5
-  set time-step .1 ;.03 ; .3 max
+  set time-step .15 ;.03 ; .3 max
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms atoms-per-row * atoms-per-column
@@ -269,7 +269,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  control-temp
+  ;control-temp
   if any? links [
     ask links [die]
   ]
@@ -669,7 +669,7 @@ SWITCH
 156
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -736,7 +736,7 @@ atoms-per-row
 atoms-per-row
 5
 30
-30.0
+22.0
 1
 1
 NIL
@@ -751,7 +751,7 @@ atoms-per-column
 atoms-per-column
 5
 30
-30.0
+22.0
 1
 1
 NIL
@@ -766,9 +766,9 @@ KE + PE
 NIL
 NIL
 0.0
-2000.0
--20.173
--20.167
+200.0
+-106.535
+-106.51
 false
 false
 "" ""

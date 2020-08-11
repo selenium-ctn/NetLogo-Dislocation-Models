@@ -201,7 +201,7 @@ end
 to setup-force-arrows ; sets up the initial force arrows
   ifelse force-mode = "Shear" [
     set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
-    set f-app-vert-per-atom ((f-app-vert / 100) / (atoms-per-row - f-disloc-adjust))
+    set f-app-vert-per-atom ((f-app-vert) / (atoms-per-row - f-disloc-adjust))
     create-force-arrows atoms-per-row + ceiling ( atoms-per-column / 2 ) - 1 [
       set shape "arrow"
       set color white
@@ -212,7 +212,7 @@ to setup-force-arrows ; sets up the initial force arrows
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
-        set size sqrt(f-app-vert-per-atom * 100)
+        set size sqrt(f-app-vert-per-atom )
         face myself
       ]
     ]
@@ -245,6 +245,7 @@ to setup-force-arrows ; sets up the initial force arrows
           ]
           [ set ycor [ycor] of myself - 2 ]
         face myself
+        if force-mode = "Compression" [ rt 180 ]
       ]
     ]
     ask atoms with [posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr"] [
@@ -257,7 +258,7 @@ to setup-force-arrows ; sets up the initial force arrows
         ]
         [ set xcor [xcor] of myself + 2 ]
         face myself
-        rt 180
+        if force-mode = "Tension" [ rt 180 ]
       ]
     ]
   ]
@@ -342,7 +343,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
         posi = "ulc" or posi = "t" or posi = "urc" [
             ask force-arrows with [my-atom = [who] of myself] [
               set xcor [xcor] of myself
-              set size sqrt(f-app-vert-per-atom * 100)
+              set size sqrt(f-app-vert-per-atom)
           ]
         ])
         if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
@@ -372,7 +373,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
          ]
         posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
             ask force-arrows with [my-atom = [who] of myself] [
-              set size sqrt(f-app-vert-per-atom * 100)
+              set size sqrt(f-app-vert-per-atom)
               set xcor [xcor] of myself
               ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
                 set ycor [ycor] of myself + 2
@@ -414,14 +415,14 @@ to update-force-and-velocity-and-links
         set new-fy report-new-force posi new-fy
       ])
    ]
-  force-mode = "Tension" [
+  force-mode = "Tension"  or force-mode = "Compression" [
       (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
         set new-fx report-new-force posi new-fx
       ]
       posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
         set new-fy report-new-force posi new-fy
       ]
-      bulk-force? and posi = "t" or posi = "b" [
+      bulk-force? and (posi = "t" or posi = "b") [
         set new-fy report-new-force posi new-fy
       ])
    ])
@@ -432,9 +433,10 @@ to update-force-and-velocity-and-links
    set fx new-fx
    set fy new-fy
 
-   if update-color? [ ; updating atom color
+   (ifelse update-color? [ ; updating atom color
     set-color total-force
-  ]
+   ]
+   [ set color blue ])
 
     ; updating links
     if diagonal-right-links [
@@ -467,7 +469,7 @@ end
 to-report report-new-force [ pos f-gen ]
   (ifelse force-mode = "Shear" [
     set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
-    set f-app-vert-per-atom ((f-app-vert / 100) / (atoms-per-row - f-disloc-adjust))
+    set f-app-vert-per-atom ((f-app-vert) / (atoms-per-row - f-disloc-adjust))
      (ifelse pos = "ul" [
        report f-gen + f-app-per-atom
       ]
@@ -477,7 +479,7 @@ to-report report-new-force [ pos f-gen ]
    ]
   force-mode = "Tension" [
     set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
-    set f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
+    set f-app-vert-per-atom (f-app-vert) / vert-force-count
      (ifelse pos = "ul" or pos = "ll" [
        report f-gen - f-app-per-atom
       ]
@@ -489,6 +491,22 @@ to-report report-new-force [ pos f-gen ]
       ]
      pos = "llc" or pos = "lrc" or pos = "b" [
        report f-gen + f-app-vert-per-atom
+     ])
+    ]
+   force-mode = "Compression" [
+    set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
+    set f-app-vert-per-atom (f-app-vert) / vert-force-count
+     (ifelse pos = "ul" or pos = "ll" [
+       report f-gen + f-app-per-atom
+      ]
+     pos = "ur" or pos = "lr" [
+       report f-gen - f-app-per-atom
+      ]
+     pos = "ulc" or pos = "urc"  or pos = "t" [
+       report f-gen + f-app-vert-per-atom
+      ]
+     pos = "llc" or pos = "lrc" or pos = "b" [
+       report f-gen - f-app-vert-per-atom
      ])
     ])
 end
@@ -585,7 +603,7 @@ CHOOSER
 58
 force-mode
 force-mode
-"Shear" "Tension"
+"Shear" "Tension" "Compression"
 1
 
 SLIDER
@@ -597,7 +615,7 @@ system-temp
 system-temp
 0
 .75
-0.02
+0.14
 .01
 1
 NIL
@@ -611,8 +629,8 @@ SLIDER
 f-app
 f-app
 0
-12
-0.0
+20
+2.9
 .1
 1
 N
@@ -626,11 +644,11 @@ SLIDER
 f-app-vert
 f-app-vert
 0
-200
-123.6
+2
+0.6
 .1
 1
-cN
+N
 HORIZONTAL
 
 SWITCH
@@ -640,7 +658,7 @@ SWITCH
 156
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -683,7 +701,7 @@ SWITCH
 135
 diagonal-left-links
 diagonal-left-links
-1
+0
 1
 -1000
 
@@ -694,7 +712,7 @@ SWITCH
 173
 horizontal-links
 horizontal-links
-1
+0
 1
 -1000
 
@@ -707,7 +725,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-20.0
+8.0
 1
 1
 NIL
@@ -722,7 +740,7 @@ atoms-per-column
 atoms-per-column
 5
 25
-20.0
+8.0
 1
 1
 NIL
@@ -757,7 +775,7 @@ SWITCH
 471
 bulk-force?
 bulk-force?
-0
+1
 1
 -1000
 
