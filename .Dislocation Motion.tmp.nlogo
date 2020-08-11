@@ -8,11 +8,13 @@ atoms-own [
   vy     ; y-component of velocity vector
   posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
            ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
+  posi2 ; ur, lr, ll, ul
   mass
 ]
 
 force-arrows-own [
   my-atom ; the atom that the force-arrow is indicating the force on
+  force-dir ; horizontal (X) or vertical (Y) force
 ]
 
 globals [
@@ -42,7 +44,7 @@ to setup
   set eps .07
   set sigma .907
   set cutoff-dist 5
-  set time-step .05
+  set time-step .1 ; .05
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms atoms-per-row * atoms-per-column
@@ -88,7 +90,7 @@ to setup-atoms
   let xmin [xcor] of one-of atoms with-min [xcor]
   let median-xcor (median [xcor] of atoms)
   let median-ycor (median [ycor] of atoms)
-  let sectioning-value  (len / 4 )
+  let sectioning-value floor (len / 4 )
 
   ; this offset is necessary if there is an even number of atoms-per-column. Atom x-positions in the top row will not be
   ; the same as in in the bottom row, because the row will be shifted a little on account of the close packed structure
@@ -107,6 +109,12 @@ to setup-atoms
         set posi "b"
        ]
        [ set posi "lrc" ])
+      (ifelse xcor = xmin [
+        set posi2 "ll"
+        ]
+       xcor = xmax - x-dist / 2 [
+        set posi2 "lr"
+      ])
     ]
     ycor = ymax [
       (ifelse xcor >= xmin + even-offset-adjust and xcor < xmin + sectioning-value + even-offset-adjust - odd-offset-adjust  [
@@ -116,6 +124,12 @@ to setup-atoms
         set posi "t"
       ]
       [ set posi "urc" ])
+      (ifelse xcor = xmin + even-offset-adjust [
+        set posi2 "ul"
+        ]
+       xcor = xmax - odd-offset-adjust [
+        set posi2 "ur"
+      ])
     ]
     xcor = xmin or xcor = xmin + (1 / 2) [
       (ifelse ycor < ymax and ycor >= median-ycor [
@@ -183,13 +197,14 @@ to setup-force-arrows ; sets up the initial force arrows
   ifelse force-mode = "Shear" [
     set f-app-per-atom f-app / (ceiling ( atoms-per-column / 2 ) - 1)
     set f-app-vert-per-atom ((f-app-vert / 100) / (atoms-per-row - f-disloc-adjust))
-    create-force-arrows atoms-per-row + ceiling ( atoms-per-column / 2 ) - 1 [
+    create-force-arrows atoms-per-row + ceiling ( atoms-per-column / 2 ) [
       set shape "arrow"
       set color white
     ]
 
     ask atoms with [posi = "ulc" or posi = "t" or posi = "urc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set force-dir "Y"
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
         set my-atom [who] of myself
@@ -197,8 +212,9 @@ to setup-force-arrows ; sets up the initial force arrows
         face myself
       ]
     ]
-    ask atoms with [posi = "ul"] [
+    ask atoms with [posi = "ul" or posi2 = "ul"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set force-dir "X"
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
         set my-atom [who] of myself
@@ -212,12 +228,13 @@ to setup-force-arrows ; sets up the initial force arrows
     set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
     set f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
 
-    create-force-arrows 2 * atoms-per-column - 4 + vert-force-count [
+    create-force-arrows 2 * atoms-per-column + vert-force-count [
       set shape "arrow"
       set color white ]
 
     ask atoms with [posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set force-dir "Y"
         set my-atom [who] of myself
         set size sqrt(f-app-vert-per-atom * 100)
         set xcor [xcor] of myself
@@ -228,12 +245,14 @@ to setup-force-arrows ; sets up the initial force arrows
         face myself
       ]
     ]
-    ask atoms with [posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr"] [
+    ask atoms with [posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr"
+    or posi2 = "ul" or posi2 = "ll" or posi2 = "ur" or posi2 = "lr" ] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
+        set force-dir "X"
         set size sqrt(f-app-per-atom)
         set my-atom [who] of myself
         set ycor [ycor] of myself
-        ifelse [posi] of myself = "ul" or [posi] of myself = "ll" [
+        ifelse [posi] of myself = "ul" or [posi] of myself = "ll" or [posi2] of myself = "ul" or [posi2] of myself = "ll" [
           set xcor [xcor] of myself - 2
         ]
         [ set xcor [xcor] of myself + 2 ]
@@ -265,6 +284,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+  update-lattice-view
   control-temp
   if any? links [ ; links are killed and reformed each time step
     ask links [die]
@@ -276,6 +296,22 @@ to go
     update-force-and-velocity-and-links
   ]
   tick-advance time-step
+end
+
+to update-lattice-view
+  (ifelse lattice-view = "large-atoms" [
+    ask atoms [
+      show-turtle
+      set size .9
+    ]
+  ]
+  lattice-view = "small-atoms" [
+    ask atoms [
+       show-turtle
+       set size .6
+    ]
+  ]
+  [ask atoms [ hide-turtle ]])
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
@@ -291,24 +327,24 @@ end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
     ifelse force-mode = "Shear" [
-      if posi != "ll" and posi != "lr" [ ; atoms in the ll and lr positions are pinned/don't move in the shear mode
+      if posi != "ll" and posi != "lr" and posi2 != "ll" and posi2 != "lr" [ ; atoms in the ll and lr positions are pinned/don't move in the shear mode
         ; updating position
         set xcor velocity-verlet-pos xcor vx (fx / mass)
         set ycor velocity-verlet-pos ycor vy (fy / mass)
 
         ; force arrow updating
-        (ifelse posi = "ul" [
-          ask force-arrows with [my-atom = [who] of myself] [
+        if posi = "ul" or posi2 = "ul" [
+          ask force-arrows with [my-atom = [who] of myself and force-dir = "X" ] [
             set xcor [xcor] of myself - 2
             set size sqrt( f-app-per-atom )
           ]
         ]
-        posi = "ulc" or posi = "t" or posi = "urc" [
-            ask force-arrows with [my-atom = [who] of myself] [
+        if posi = "ulc" or posi = "t" or posi = "urc" [
+            ask force-arrows with [my-atom = [who] of myself and force-dir = "Y"] [
               set xcor [xcor] of myself
               set size sqrt(f-app-vert-per-atom * 100)
           ]
-        ])
+        ]
         if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
             if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
               ask force-arrows with [my-atom = [who] of myself] [die]
@@ -323,27 +359,30 @@ to move  ; atom procedure, uses velocity-verlet algorithm
       set ycor velocity-verlet-pos ycor vy (fy / mass)
 
       ; force arrow updating
-      (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
-          ask force-arrows with [my-atom = [who] of myself] [
+      if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" or
+         posi2 = "ul" or posi2 = "ll" or posi2 = "ur" or posi = "lr"[
+          ask force-arrows with [my-atom = [who] of myself and force-dir = "X"] [
             set size sqrt(f-app-per-atom)
             set ycor [ycor] of myself
-            ifelse [posi] of myself = "ul" or[posi] of myself = "ll" [
+            ifelse [posi] of myself = "ul" or[posi] of myself = "ll" or [posi2] of myself = "ul" or [posi2] of myself = "ll"[
               set xcor [xcor] of myself - 2
             ]
             [ set xcor [xcor] of myself + 2 ]
+            if xcor > max-pxcor or xcor < min-pxcor [ die ]
           ]
          ]
-        posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
-            ask force-arrows with [my-atom = [who] of myself] [
+       if posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
+            ask force-arrows with [my-atom = [who] of myself and force-dir = "Y"] [
               set size sqrt(f-app-vert-per-atom * 100)
               set xcor [xcor] of myself
               ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
                 set ycor [ycor] of myself + 2
               ]
               [ set ycor [ycor] of myself - 2 ]
+              if ycor > max-pycor or ycor < min-pycor [ die ]
             ]
-          ])
-      if xcor > max-pxcor or xcor < min-pycor [
+          ]
+      if xcor > max-pxcor or xcor < min-pxcor or ycor > max-pycor or ycor < min-pycor [
         if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [ ; kills force-arrows when their associated atoms move off the world
         ask force-arrows with [my-atom = [who] of myself] [die]
         ]
@@ -369,20 +408,23 @@ to update-force-and-velocity-and-links
 
   ; adjusting the forces to account for any external applied forces
   (ifelse force-mode = "Shear" [
-      (ifelse posi = "ul" [
-        set new-fx report-new-force posi new-fx
+      if posi = "ul" or posi2 = "ul"[
+        set new-fx report-new-force "ul" new-fx
       ]
-      posi = "ulc" or posi = "t" or posi = "urc" [
+      if posi = "ulc" or posi = "t" or posi = "urc" [
         set new-fy report-new-force posi new-fy
-      ])
+      ]
    ]
   force-mode = "Tension" [
-      (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
+      if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
         set new-fx report-new-force posi new-fx
       ]
-      posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
+      if posi2 = "ul" or posi2 = "ll" or posi2 = "ur" or posi2 = "lr" [
+        set new-fx report-new-force posi2 new-fx
+      ]
+      if posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
         set new-fy report-new-force posi new-fy
-      ])
+      ]
    ])
 
    ; updating velocity and force
@@ -391,9 +433,10 @@ to update-force-and-velocity-and-links
    set fx new-fx
    set fy new-fy
 
-   if update-color? [ ; updating atom color
+   (ifelse update-color? [ ; updating atom color
     set-color total-force
-  ]
+   ]
+   [ set color blue ])
 
     ; updating links
     if diagonal-right-links [
@@ -556,7 +599,7 @@ system-temp
 system-temp
 0
 .75
-0.15
+0.07
 .01
 1
 NIL
@@ -571,7 +614,7 @@ f-app
 f-app
 0
 12
-9.0
+2.9
 .1
 1
 N
@@ -586,7 +629,7 @@ f-app-vert
 f-app-vert
 0
 8
-1.9
+0.6
 .1
 1
 cN
@@ -599,7 +642,7 @@ SWITCH
 156
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -610,7 +653,7 @@ SWITCH
 52
 update-color?
 update-color?
-0
+1
 1
 -1000
 
@@ -642,7 +685,7 @@ SWITCH
 134
 diagonal-left-links
 diagonal-left-links
-0
+1
 1
 -1000
 
@@ -681,7 +724,7 @@ atoms-per-column
 atoms-per-column
 5
 15
-13.0
+10.0
 1
 1
 NIL
