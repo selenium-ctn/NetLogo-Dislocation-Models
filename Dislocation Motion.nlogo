@@ -42,7 +42,7 @@ to setup
   set eps .07
   set sigma .907
   set cutoff-dist 5
-  set time-step .05
+  set time-step .1 ;.05
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   set num-atoms atoms-per-row * atoms-per-column
@@ -265,6 +265,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+  update-lattice-view
   control-temp
   if any? links [ ; links are killed and reformed each time step
     ask links [die]
@@ -276,6 +277,22 @@ to go
     update-force-and-velocity-and-links
   ]
   tick-advance time-step
+end
+
+to update-lattice-view
+  (ifelse lattice-view = "large-atoms" [
+    ask atoms [
+      show-turtle
+      set size .9
+    ]
+  ]
+  lattice-view = "small-atoms" [
+    ask atoms [
+       show-turtle
+       set size .6
+    ]
+  ]
+  [ask atoms [ hide-turtle ]])
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
@@ -331,6 +348,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
               set xcor [xcor] of myself - 2
             ]
             [ set xcor [xcor] of myself + 2 ]
+            if xcor > max-pxcor or xcor < min-pxcor [ die ]
           ]
          ]
         posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
@@ -341,6 +359,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
                 set ycor [ycor] of myself + 2
               ]
               [ set ycor [ycor] of myself - 2 ]
+              if ycor > max-pycor or ycor < min-pycor [ die ]
             ]
           ])
       if xcor > max-pxcor or xcor < min-pycor [
@@ -571,7 +590,7 @@ f-app
 f-app
 0
 12
-9.0
+3.8
 .1
 1
 N
@@ -666,7 +685,7 @@ atoms-per-row
 atoms-per-row
 5
 15
-9.0
+10.0
 1
 1
 NIL
@@ -681,7 +700,7 @@ atoms-per-column
 atoms-per-column
 5
 15
-7.0
+10.0
 1
 1
 NIL
