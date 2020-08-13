@@ -16,18 +16,17 @@ force-arrows-own [
 ]
 
 globals [
-  diameter ; diameter of atom
   eps ; used in LJ force
   sigma ; used in LJ force
   cutoff-dist ; each atom is influenced by its neighbors within this distance
-  time-step ; time step for the velocity verlet algorithm
+  dt ; time step for the velocity verlet algorithm
   sqrt-2-kb-over-m  ; constant
   cone-check-dist ; each atom links with neighbors within this distance
-  num-atoms ; total number of atoms in system
   f-app-per-atom ; The magnitude of force felt by each individual atom that f-app is directly acting on
   f-app-vert-per-atom ; The magnitude of force felt by each individual atom that the f-app-vert is directly acting on
   vert-force-count ; the number of atoms experiencing f-app-vert in the tension force-mode
   f-disloc-adjust ; subtracts an atom from the number of atoms experiencing f-app-vert if there is a dislocation (relevant for shear calculations only)
+  prev-lattice-view ; the lattice view in the previous time step
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -36,19 +35,14 @@ globals [
 
 to setup
   clear-all
-  ifelse lattice-view = "small-atoms" [
-    set diameter .6 ]
-    [set diameter .9]
   set eps .07
   set sigma .907
   set cutoff-dist 5
-  set time-step .1 ;.05
+  set dt .1 ;.05
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
-  set num-atoms atoms-per-row * atoms-per-column
-  setup-atoms
+  setup-atoms-and-links
   setup-force-arrows
-  setup-links
   init-velocity
   if lattice-view = "hide-atoms" [
     ask atoms [ hide-turtle ]
@@ -57,38 +51,38 @@ to setup
   reset-ticks
 end
 
-to setup-atoms
-  create-atoms num-atoms [
+to setup-atoms-and-links
+  create-atoms atoms-per-row * atoms-per-column [
     set shape "circle"
-    set size diameter
     set color blue
     set mass 1
+    ifelse lattice-view = "small-atoms" [
+      set size .6 ]
+      [set size .9]
   ]
-    let len atoms-per-row
-    let height atoms-per-column
-    let x-dist 1 ; the distance between atoms in the x direction
-    let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2) ; the distance between rows
-    let ypos (- height * y-dist / 2) ;the y position of the first atom
-    let xpos (- len * x-dist / 2) ;the x position of the first atom
-    let rnum 0 ; row number, starts at 0 for easy modulo division
-    ask atoms [ ; setting up the HCP structure
-      if xpos >= (len * x-dist / 2)  [ ; condition for starting new row
-        set rnum rnum + 1
-        set xpos (- len * x-dist / 2) + (rnum mod 2) * x-dist / 2
-        set ypos ypos + y-dist
-      ]
-      setxy xpos ypos
-      set xpos xpos + x-dist
+  let x-dist 1 ; the distance between atoms in the x direction
+  let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2) ; the distance between rows
+  let ypos (- atoms-per-column * y-dist / 2) ;the y position of the first atom
+  let xpos (- atoms-per-row * x-dist / 2) ;the x position of the first atom
+  let rnum 0 ; row number, starts at 0 for easy modulo division
+  ask atoms [ ; setting up the HCP structure
+    if xpos >= (atoms-per-row * x-dist / 2)  [ ; condition for starting new row
+      set rnum rnum + 1
+      set xpos (- atoms-per-row * x-dist / 2) + (rnum mod 2) * x-dist / 2
+      set ypos ypos + y-dist
     ]
+    setxy xpos ypos
+    set xpos xpos + x-dist
+  ]
 
   ; values used in assigning atom positions
-  let ymax [ycor] of one-of atoms with-max [ycor]
-  let xmax [xcor] of one-of atoms with-max [xcor]
-  let ymin [ycor] of one-of atoms with-min [ycor]
-  let xmin [xcor] of one-of atoms with-min [xcor]
+  let ymax max [ycor] of atoms
+  let xmax max [xcor] of atoms
+  let ymin min [ycor] of atoms
+  let xmin min [xcor] of atoms
   let median-xcor (median [xcor] of atoms)
   let median-ycor (median [ycor] of atoms)
-  let sectioning-value floor (len / 4 )
+  let sectioning-value floor (atoms-per-row / 4 )
 
   ; this offset is necessary if there is an even number of atoms-per-column. Atom x-positions in the top row will not be
   ; the same as in in the bottom row, because the row will be shifted a little on account of the close packed structure
@@ -140,62 +134,31 @@ to setup-atoms
   if create-dislocation? [ ; creating the dislocation
     let curr-y-cor median-ycor
     let curr-x-cor median-xcor
-    let it-num 0
+    let ii 0
     while [ curr-y-cor <= ceiling (ymax) ] [
-      ask atoms with [xcor <= curr-x-cor + x-dist * .75
-        and xcor >= curr-x-cor
-        and ycor <= curr-y-cor + y-dist * .75
-        and ycor >= curr-y-cor ] [ die ]
-      ask atoms with [ xcor >= curr-x-cor and ycor <= curr-y-cor + y-dist * .75 and ycor >= curr-y-cor ] [ set xcor xcor - .05 * it-num]
-      ask atoms with [ xcor < curr-x-cor and ycor <= curr-y-cor + y-dist * .75 and ycor >= curr-y-cor ] [ set xcor xcor + .05 * it-num]
+      ask atoms with [
+        ycor <= curr-y-cor + y-dist * .75
+        and ycor >= curr-y-cor ] [
+        (ifelse xcor <= curr-x-cor + x-dist * .75
+          and xcor >= curr-x-cor [ die ]
+          xcor >= curr-x-cor [ set xcor xcor - .05 * ii ]
+          xcor < curr-x-cor [ set xcor xcor + .05 * ii ])
+        ]
       set curr-y-cor curr-y-cor + y-dist
       set curr-x-cor curr-x-cor - x-dist / 2
-      set it-num it-num + 1
+      set ii ii + 1
     ]
     set f-disloc-adjust 1
    ]
 
-;  set f-disloc-adjust 0
-;  if create-dislocation? [ ; creating the dislocation
-;    let curr-y-cor median-ycor
-;    let curr-x-cor median-xcor
-;    while [ curr-y-cor <= ceiling (ymax) ] [
-;      ask atoms with [xcor <= curr-x-cor + x-dist * .75
-;        and xcor >= curr-x-cor
-;        and ycor <= curr-y-cor + y-dist * .75
-;        and ycor >= curr-y-cor ] [ die ]
-;      set curr-y-cor curr-y-cor + y-dist
-;      set curr-x-cor curr-x-cor - x-dist / 2
-;    ]
-;    set f-disloc-adjust 1
-;   ]
-end
-
-to setup-links ; sets up the initial links
   ask atoms [
-    if diagonal-right-links [
-      set heading 330
-      link-with-atoms-in-cone-setup
-      ]
-    if diagonal-left-links [
-      set heading 30
-      link-with-atoms-in-cone-setup
-      ]
-    if horizontal-links [
-      set heading 90
-      link-with-atoms-in-cone-setup
-     ]
+    let in-radius-atoms (other atoms in-radius cutoff-dist)
+    update-links in-radius-atoms
   ]
-  ask links [
+  ask links [ ; stylizing/coloring links
     set thickness .25
-    color-links link-length
+    color-links
   ]
-end
-
-to link-with-atoms-in-cone-setup
-  if any? atoms in-cone cone-check-dist 45 [
-        create-links-with other atoms in-cone cone-check-dist 45
-       ]
 end
 
 to setup-force-arrows ; sets up the initial force arrows
@@ -211,7 +174,7 @@ to setup-force-arrows ; sets up the initial force arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself
         set ycor [ycor] of myself + 2
-        set my-atom [who] of myself
+        set my-atom myself
         set size sqrt(f-app-vert-per-atom )
         face myself
       ]
@@ -220,7 +183,7 @@ to setup-force-arrows ; sets up the initial force arrows
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set xcor [xcor] of myself - 2
         set ycor [ycor] of myself
-        set my-atom [who] of myself
+        set my-atom myself
         set size sqrt(f-app-per-atom)
         face myself
       ]
@@ -229,7 +192,7 @@ to setup-force-arrows ; sets up the initial force arrows
   [
     set vert-force-count count atoms with [posi = "urc" or posi = "lrc" or posi = "ulc" or posi = "llc" ]
     set f-app-per-atom  f-app / (2 * atoms-per-column - 4)
-    set f-app-vert-per-atom (f-app-vert / 100) / vert-force-count
+    set f-app-vert-per-atom (f-app-vert) / vert-force-count
 
     create-force-arrows 2 * atoms-per-column - 4 + vert-force-count [
       set shape "arrow"
@@ -237,8 +200,8 @@ to setup-force-arrows ; sets up the initial force arrows
 
     ask atoms with [posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
-        set my-atom [who] of myself
-        set size sqrt(f-app-vert-per-atom * 100)
+        set my-atom myself
+        set size sqrt(f-app-vert-per-atom)
         set xcor [xcor] of myself
         ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
           set ycor [ycor] of myself + 2
@@ -251,7 +214,7 @@ to setup-force-arrows ; sets up the initial force arrows
     ask atoms with [posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr"] [
       ask one-of force-arrows with [xcor = 0 and ycor = 0] [
         set size sqrt(f-app-per-atom)
-        set my-atom [who] of myself
+        set my-atom myself
         set ycor [ycor] of myself
         ifelse [posi] of myself = "ul" or [posi] of myself = "ll" [
           set xcor [xcor] of myself - 2
@@ -269,11 +232,11 @@ end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
                  ; velocity split between the x velocity and the y velocity
-  let v-avg sqrt-2-kb-over-m * sqrt system-temp
+  let speed-avg sqrt-2-kb-over-m * sqrt system-temp
   ask atoms [
-    let x-y-split random-float 1
-    set vx v-avg * x-y-split * positive-or-negative
-    set vy v-avg * (1 - x-y-split) * positive-or-negative]
+    let x-portion random-float 1
+    set vx speed-avg * x-portion * positive-or-negative
+    set vy speed-avg * (1 - x-portion) * positive-or-negative]
 end
 
 to-report positive-or-negative
@@ -285,18 +248,21 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  update-lattice-view
+  if lattice-view != prev-lattice-view [ update-lattice-view ]
   control-temp
-  if any? links [ ; links are killed and reformed each time step
-    ask links [die]
-  ]
-  ask atoms [
+  ask links [die]
+  ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
     move
   ]
   ask atoms [
     update-force-and-velocity-and-links
   ]
-  tick-advance time-step
+  ask links [ ; stylizing/coloring links
+    set thickness .25
+    color-links
+  ]
+  set prev-lattice-view lattice-view
+  tick-advance dt
 end
 
 to update-lattice-view
@@ -312,16 +278,19 @@ to update-lattice-view
        set size .6
     ]
   ]
-  [ask atoms [ hide-turtle ]])
+  [; lattice-view = hide-atoms
+      ask atoms [ hide-turtle ]
+  ])
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
-  let current-v-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
-  let target-v-avg sqrt-2-kb-over-m * sqrt system-temp
-  if current-v-avg != 0 [
+  let current-speed-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
+  let target-speed-avg sqrt-2-kb-over-m * sqrt system-temp
+  let scaling-factor target-speed-avg / current-speed-avg
+  if current-speed-avg != 0 [
     ask atoms [
-      set vx vx * (target-v-avg / current-v-avg)
-      set vy vy * (target-v-avg / current-v-avg)
+      set vx vx * scaling-factor
+      set vy vy * scaling-factor
     ]
   ]
 end
@@ -335,33 +304,33 @@ to move  ; atom procedure, uses velocity-verlet algorithm
 
         ; force arrow updating
         (ifelse posi = "ul" [
-          ask force-arrows with [my-atom = [who] of myself] [
+          ask force-arrows with [my-atom = myself] [
             set xcor [xcor] of myself - 2
             set size sqrt( f-app-per-atom )
           ]
         ]
         posi = "ulc" or posi = "t" or posi = "urc" [
-            ask force-arrows with [my-atom = [who] of myself] [
+            ask force-arrows with [my-atom = myself] [
               set xcor [xcor] of myself
               set size sqrt(f-app-vert-per-atom)
           ]
         ])
         if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
             if posi = "ul" or posi = "ulc" or posi = "t" or posi = "urc" [
-              ask force-arrows with [my-atom = [who] of myself] [die]
+              ask force-arrows with [my-atom = myself] [die]
           ]
          die ; kills atoms when they move off the world
         ]
       ]
     ]
-    [ ;; force-mode = "Tension"
+    [ ;; force-mode = "Tension" or "Compression"
       ; updating position
       set xcor velocity-verlet-pos xcor vx (fx / mass)
       set ycor velocity-verlet-pos ycor vy (fy / mass)
 
       ; force arrow updating
       (ifelse posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [
-          ask force-arrows with [my-atom = [who] of myself] [
+          ask force-arrows with [my-atom = myself] [
             set size sqrt(f-app-per-atom)
             set ycor [ycor] of myself
             ifelse [posi] of myself = "ul" or[posi] of myself = "ll" [
@@ -372,7 +341,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
           ]
          ]
         posi = "ulc" or posi = "urc" or posi = "llc" or posi = "lrc" [
-            ask force-arrows with [my-atom = [who] of myself] [
+            ask force-arrows with [my-atom = myself] [
               set size sqrt(f-app-vert-per-atom)
               set xcor [xcor] of myself
               ifelse [posi] of myself = "ulc" or [posi] of myself = "urc" [
@@ -384,7 +353,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
           ])
       if xcor > max-pxcor or xcor < min-pycor [
         if posi = "ul" or posi = "ll" or posi = "ur" or posi = "lr" [ ; kills force-arrows when their associated atoms move off the world
-        ask force-arrows with [my-atom = [who] of myself] [die]
+        ask force-arrows with [my-atom = myself] [die]
         ]
         die ; kills atoms when they move off the world
       ]
@@ -400,7 +369,7 @@ to update-force-and-velocity-and-links
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
     let r distance myself
     let force LJ-force r
-    set total-force total-force + abs(force)
+    set total-force total-force + abs(force) ; keep track of this for visualization (coloring the atoms based on their potential energy -- since we do abs(force), that corresponds to PE
     face myself
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
@@ -427,35 +396,35 @@ to update-force-and-velocity-and-links
       ])
    ])
 
-   ; updating velocity and force
-   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
-   set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
-   set fx new-fx
-   set fy new-fy
+  ; updating velocity and force
+  set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+  set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+  set fx new-fx
+  set fy new-fy
 
-   (ifelse update-color? [ ; updating atom color
+  update-atom-color total-force
+  update-links in-radius-atoms
+end
+
+to update-atom-color [total-force] ; updating atom color
+  (ifelse update-color? [
     set-color total-force
-   ]
+  ]
    [ set color blue ])
+end
 
-    ; updating links
-    if diagonal-right-links [
-      set heading 330
-      link-with-atoms-in-cone in-radius-atoms
-      ]
-    if diagonal-left-links [
-      set heading 30
-      link-with-atoms-in-cone in-radius-atoms
-      ]
-    if horizontal-links [
-      set heading 90
-      link-with-atoms-in-cone in-radius-atoms
-      ]
-
-  if any? links [ ; stylizing/coloring links
-   ask links [
-      set thickness .25
-      color-links link-length]
+to update-links [in-radius-atoms] ; updating links
+  if diagonal-right-links [
+    set heading 330
+    link-with-atoms-in-cone in-radius-atoms
+  ]
+  if diagonal-left-links [
+    set heading 30
+    link-with-atoms-in-cone in-radius-atoms
+  ]
+  if horizontal-links [
+    set heading 90
+    link-with-atoms-in-cone in-radius-atoms
   ]
 end
 
@@ -511,29 +480,39 @@ to-report report-new-force [ pos f-gen ]
     ])
 end
 
-to-report LJ-force [ r ]
+to-report LJ-force [ r ] ; optimize?
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
-  report pos + v * time-step + (1 / 2) * a * (time-step ^ 2)
+  report pos + v * dt + (1 / 2) * a * (dt ^ 2)
 end
 
 to-report velocity-verlet-velocity [v a new-a]  ; velocity, acceleration, new acceleration
-  report v + (1 / 2) * (new-a + a) * time-step
+  report v + (1 / 2) * (new-a + a) * dt
 end
 
 to set-color [v]
   set color scale-color blue sqrt(v) -.3 1.4
 end
 
-to color-links [len]
+to color-links ; transparancy.......change that.....
   let min-eq-bond-len .995
   let max-eq-bond-len 1.018073
-  (ifelse len < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - len) -.05 .35 ]
-    len > max-eq-bond-len [ set color scale-color yellow sqrt (len - max-eq-bond-len) -.05 .35 ]
+  (ifelse
+    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) -.05 .35 ]
+    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) -.05 .35 ]
     [ set color gray ])
 end
+
+;to color-links
+;  let min-eq-bond-len .995
+;  let max-eq-bond-len 1.018073
+;  (ifelse
+;    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) .35 -.05 ]
+;    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) .35 -.05]
+;    [ set color white ])
+;end
 @#$#@#$#@
 GRAPHICS-WINDOW
 192
@@ -563,10 +542,10 @@ ticks
 30.0
 
 BUTTON
-10
-379
-96
-412
+9
+194
+95
+227
 NIL
 setup
 NIL
@@ -580,10 +559,10 @@ NIL
 1
 
 BUTTON
-106
-379
-191
-412
+105
+194
+190
+227
 NIL
 go
 T
@@ -604,58 +583,58 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
-14
-249
-186
-282
+12
+288
+184
+321
 system-temp
 system-temp
 0
 .75
-0.14
+0.07
 .01
 1
 NIL
 HORIZONTAL
 
 SLIDER
-14
-292
-186
-325
+12
+331
+184
+364
 f-app
 f-app
 0
 20
-2.9
+6.5
 .1
 1
 N
 HORIZONTAL
 
 SLIDER
-14
-335
-186
-368
+12
+374
+184
+407
 f-app-vert
 f-app-vert
 0
 2
-0.6
+0.0
 .1
 1
 N
 HORIZONTAL
 
 SWITCH
-20
-123
-179
-156
+19
+65
+178
+98
 create-dislocation?
 create-dislocation?
 1
@@ -675,9 +654,9 @@ update-color?
 
 CHOOSER
 14
-66
+236
 181
-111
+281
 lattice-view
 lattice-view
 "large-atoms" "small-atoms" "hide-atoms"
@@ -717,30 +696,30 @@ horizontal-links
 -1000
 
 SLIDER
-14
-164
-186
-197
+13
+106
+185
+139
 atoms-per-row
 atoms-per-row
 5
 25
-8.0
+13.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-14
-206
-186
-239
+13
+148
+185
+181
 atoms-per-column
 atoms-per-column
 5
 25
-8.0
+13.0
 1
 1
 NIL
