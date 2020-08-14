@@ -5,8 +5,6 @@ atoms-own [
   fy     ; y-component of force vector
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
-  posi ; atom position. options: urc (upper right corner), ur (upper right), lr (lower right), lrc (lower right corner),
-           ; b (bottom), llc (lower left corner), ll (lower left), ul (upper left), ulc (upper left corner), t (top)
   mass
 ]
 
@@ -20,12 +18,13 @@ globals [
   f-app-per-atom ; The magnitude of force felt by each individual atom that f-app is directly acting on
   f-app-vert-per-atom ; The magnitude of force felt by each individual atom that the f-app-vert is directly acting on
   prev-lattice-view ; the lattice view in the previous time step
-  x-force-line
-  y-force-line
-  left-force-line
-  right-force-line
-  top-force-line
-  bottom-force-line
+  upper-left-fl ; upper left force line -- shear
+  top-fl ; top force line (vert force)
+  lower-left-fl
+  lower-right-fl
+  bottom-fl
+  left-fl ; tension/compression
+  right-fl ; tension/compression
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -34,6 +33,7 @@ globals [
 
 to setup
   clear-all
+  ;resize-world-init
   set eps .07
   set sigma .907
   set cutoff-dist 5
@@ -41,13 +41,23 @@ to setup
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   setup-atoms-and-links
+  ;resize-world-bulk-mode
+  ;setup-atoms-and-links
   init-velocity
   if lattice-view = "hide-atoms" [
     ask atoms [ hide-turtle ]
   ]
+  set lower-left-fl min [xcor] of atoms with [ ycor < median [ycor] of atoms ] - .005
+  set lower-right-fl max [xcor] of atoms with [ ycor < median [ycor] of atoms ] + .005
+  set top-fl max [ycor] of atoms + .005
+  set bottom-fl min [ycor] of atoms - .005
   reset-timer
   reset-ticks
 end
+
+;to resize-world-init
+;  resize-world -15 15 -15 15
+;end
 
 to setup-atoms-and-links
   create-atoms atoms-per-row * atoms-per-column [
@@ -72,28 +82,17 @@ to setup-atoms-and-links
     setxy xpos ypos
     set xpos xpos + x-dist
   ]
+  ask atoms with [xcor = min [xcor] of atoms] [die]
 
   ; values used in assigning atom positions
   let ymax max [ycor] of atoms
-  let xmax max [xcor] of atoms
-  let ymin min [ycor] of atoms
-  let xmin min [xcor] of atoms
   let median-xcor (median [xcor] of atoms)
   let median-ycor (median [ycor] of atoms)
-  let sectioning-value floor (atoms-per-row / 4 )
-
-  ; this offset is necessary if there is an even number of atoms-per-column. Atom x-positions in the top row will not be
-  ; the same as in in the bottom row, because the row will be shifted a little on account of the close packed structure
-  let even-offset-adjust 0
-  let odd-offset-adjust x-dist / 2
-  if atoms-per-column mod 2 = 0
-  [ set even-offset-adjust x-dist / 2
-    set odd-offset-adjust 0]
 
   ;set f-disloc-adjust 0
   if create-dislocation? [ ; creating the dislocation
-    let curr-y-cor median-ycor
-    let curr-x-cor median-xcor
+    let curr-y-cor median [ycor] of atoms
+    let curr-x-cor median [xcor] of atoms
     let ii 0
     while [ curr-y-cor <= ceiling (ymax) ] [
       ask atoms with [
@@ -119,6 +118,7 @@ to setup-atoms-and-links
     set thickness .25
     color-links
   ]
+
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
@@ -134,6 +134,10 @@ to-report positive-or-negative
   report ifelse-value random 2 = 0 [-1] [1]
 end
 
+;to resize-world-bulk-mode
+;  resize-world (min [xcor] of atoms - .5) (max [xcor] of atoms + .5) (min [ycor] of atoms - .5) (max [ycor] of atoms + .5)
+;end
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Runtime Procedures ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -145,8 +149,7 @@ to go
   ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
     move
   ]
-  set x-force-line min [xcor] of atoms with [ ycor > median [ycor] of atoms ] - .5
-  set y-force-line max [ycor] of atoms + .5
+  calculate-fl-positions
   ask atoms [
     update-force-and-velocity-and-links
   ]
@@ -190,12 +193,10 @@ end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
     ifelse force-mode = "Shear" [
-;      if posi != "ll" and posi != "lr" [ ; atoms in the ll and lr positions are pinned/don't move in the shear mode
-        ; updating position
         set xcor velocity-verlet-pos xcor vx (fx / mass)
         set ycor velocity-verlet-pos ycor vy (fy / mass)
         if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
-         die ; kills atoms when they move off the world
+      ;   die ; kills atoms when they move off the world
         ]
       ;]
     ]
@@ -206,11 +207,20 @@ to move  ; atom procedure, uses velocity-verlet algorithm
 
       ; force arrow updating
       if xcor > max-pxcor or xcor < min-pycor [
-        die ; kills atoms when they move off the world
+       ; die ; kills atoms when they move off the world
       ]
    ]
 end
 
+to calculate-fl-positions
+  ifelse force-mode = "Shear" [
+    set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ] - .5
+  ]
+  [ ; force-mode = tension or compression
+    set left-fl min [xcor] of atoms - .5
+    set right-fl max [xcor] of atoms + .5
+    ]
+end
 
 to update-force-and-velocity-and-links
   let new-fx 0
@@ -228,15 +238,11 @@ to update-force-and-velocity-and-links
 
   ; adjusting the forces to account for any external applied forces
   (ifelse force-mode = "Shear" [
-    if ycor > median [ycor] of atoms [
-      set new-fx report-new-force new-fx "X"
-    ]
-    set new-fy report-new-force new-fy "Y"
+    set new-fx (report-new-force "X") + new-fx
+    ;set new-fy (report-new-force "Y") + new-fy
   ]
-  [; tension
-      set new-fx report-new-force new-fx "X"
-      set new-fy report-new-force new-fy "Y"
-
+    [; tension, compression
+      set new-fx new-fx + (report-new-force "X")
   ])
 
 
@@ -279,16 +285,24 @@ to link-with-atoms-in-cone [atom-set]
     ]
 end
 
-to-report report-new-force [ f-gen dir ] ; change to external force only
+to-report report-new-force [ dir ] ; change to external force only
   (ifelse force-mode = "Shear" [
-    ifelse dir = "X" [
-      report f-gen + f-app * 1 / distancexy x-force-line ycor
+    (ifelse dir = "X" [
+    ifelse ycor >= median [ycor] of atoms [
+      report f-app * 1 / distancexy upper-left-fl ycor
     ]
-    [ ; dir = "Y"
-      report f-gen - f-app-vert * 1 / distancexy xcor y-force-line
-    ]
-    ]
-    [])
+    [ report .0000001 * 1 / (distancexy lower-left-fl ycor) - .0000001 * 1 / (distancexy lower-right-fl ycor) ]
+        ;report .001 * 1 / (distancexy lower-left-fl ycor) ^ 2 - .001 * 1 / (distancexy lower-right-fl ycor) ^ 2 ]
+      ]
+     dir = "Y" [
+        report .001 * 1 /  distancexy xcor bottom-fl - .001 * 1 / distancexy xcor top-fl ] )
+  ]
+  force-mode = "Tension" [
+    report f-app * 1 / (distancexy right-fl ycor) -  f-app * 1 / (distancexy left-fl ycor )
+  ]
+  force-mode = "Compression" [
+    report f-app * 1 / (distancexy left-fl ycor ) - f-app * 1 / (distancexy right-fl ycor)
+  ])
 end
 
 to-report LJ-force [ r ] ; optimize?
@@ -304,26 +318,45 @@ to-report velocity-verlet-velocity [v a new-a]  ; velocity, acceleration, new ac
 end
 
 to set-color [v]
-  set color scale-color blue sqrt(v) -.3 1.4
+  set color scale-color blue sqrt(v) -.3 1.7
 end
 
-to color-links ; pending update
-  let min-eq-bond-len .995
-  let max-eq-bond-len 1.018073
-  (ifelse
-    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) -.05 .35 ]
-    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) -.05 .35 ]
-    [ set color gray ])
-end
-
-;to color-links
+;to color-links ; pending update
 ;  let min-eq-bond-len .995
 ;  let max-eq-bond-len 1.018073
 ;  (ifelse
-;    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) .35 -.05 ]
-;    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) .35 -.05]
-;    [ set color white ])
+;    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) -.05 .35 ]
+;    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) -.05 .35 ]
+;    [ set color gray ])
 ;end
+
+;to color-links ; difficult to see......
+;  let min-eq-bond-len .995
+;  let max-eq-bond-len 1.018073
+;  (ifelse
+;    link-length < min-eq-bond-len [
+;      let tmp extract-rgb scale-color red sqrt(min-eq-bond-len - link-length) .9 0
+;      set color insert-item 3 tmp (125 + (min-eq-bond-len - link-length) * 250) ]
+;    link-length > max-eq-bond-len [
+;      let tmp extract-rgb scale-color yellow sqrt (link-length - max-eq-bond-len) .9 0
+;      set color insert-item 3 tmp (125 + (link-length - max-eq-bond-len) * 250)]
+;    [ let tmp extract-rgb white
+;      set color insert-item 3 tmp 125 ])
+;end
+
+to color-links ; difficult to see......
+  let min-eq-bond-len .995
+  let max-eq-bond-len 1.018073
+  (ifelse
+    link-length < min-eq-bond-len [
+      let tmp extract-rgb scale-color red sqrt(min-eq-bond-len - link-length) 1 -.2
+      set color insert-item 3 tmp (125 + (1 + sqrt(min-eq-bond-len - link-length)) * 30) ]
+    link-length > max-eq-bond-len [
+      let tmp extract-rgb scale-color yellow sqrt (link-length - max-eq-bond-len) 1 -.2
+      set color insert-item 3 tmp (125 + (1 + sqrt(link-length - max-eq-bond-len)) * 30)]
+    [ let tmp extract-rgb white
+      set color insert-item 3 tmp 125 ])
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 192
@@ -420,7 +453,7 @@ f-app
 f-app
 0
 2
-0.28
+0.0
 .01
 1
 N
@@ -515,7 +548,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-13.0
+15.0
 1
 1
 NIL
@@ -530,7 +563,7 @@ atoms-per-column
 atoms-per-column
 5
 25
-13.0
+15.0
 1
 1
 NIL
