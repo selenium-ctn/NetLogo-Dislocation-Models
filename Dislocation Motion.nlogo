@@ -37,7 +37,6 @@ globals [
 to setup
   clear-all
   ;resize-world-init
-  ;set eps .07
   set eps .07
   set sigma .907
   set cutoff-dist 5
@@ -51,10 +50,10 @@ to setup
   if lattice-view = "hide-atoms" [
     ask atoms [ hide-turtle ]
   ]
-  set lower-left-fl min [xcor] of atoms with [ ycor < median [ycor] of atoms ] - .01
-  set lower-right-fl max [xcor] of atoms with [ ycor < median [ycor] of atoms ] + .01
-  set top-fl max [ycor] of atoms + .005
-  set bottom-fl min [ycor] of atoms - .005
+;  set lower-left-fl min [xcor] of atoms with [ ycor < median [ycor] of atoms ] - .01
+;  set lower-right-fl max [xcor] of atoms with [ ycor < median [ycor] of atoms ] + .01
+;  set top-fl max [ycor] of atoms + .005
+;  set bottom-fl min [ycor] of atoms - .005
   reset-timer
   reset-ticks
 end
@@ -88,7 +87,7 @@ to setup-atoms-and-links
   ]
   ask atoms with [xcor = min [xcor] of atoms] [die]
   ;ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
-
+  ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
 
   ; values used in assigning atom positions
   let ymax max [ycor] of atoms
@@ -127,14 +126,15 @@ to setup-atoms-and-links
   ]
 
   create-fl-ends 4
-  set prev-right-fl max [xcor] of atoms +  1.018073 - .1
-  set prev-left-fl min [xcor] of atoms -  1.018073 + .1
-  set left-fl prev-left-fl - .05
-  set right-fl prev-right-fl + .05
-;  set prev-right-fl max [ycor] of atoms +  1.018073 - .1
-;  set prev-left-fl min [ycor] of atoms -  1.018073 + .1
+;  set prev-right-fl max [xcor] of atoms +  1.018073 - .05 + .5
+;  set prev-left-fl min [xcor] of atoms -  1.018073 + .05 - .5
 ;  set left-fl prev-left-fl - .05
 ;  set right-fl prev-right-fl + .05
+  ; use code below for tension tests in y direction
+  set prev-right-fl max [ycor] of atoms +  1.018073 - .05 + .5
+  set prev-left-fl min [ycor] of atoms -  1.018073 + .05 - .5
+  set left-fl prev-left-fl - .05
+  set right-fl prev-right-fl + .05
   ask one-of fl-ends with [xcor = 0 and ycor = 0] [
     set xcor right-fl
     set ycor 7 ]
@@ -258,9 +258,7 @@ to calculate-fl-positions
     set prev-left-fl tmp-left
     set prev-right-fl tmp-right
     ask fl-ends with [xcor = prev-right-fl] [ set xcor right-fl]
-    ;ask one-of fl-ends with [xcor = right-fl] [create-link-with one-of other fl-ends with [xcor = right-fl]]
     ask fl-ends with [xcor = prev-left-fl] [ set xcor left-fl]
-    ;ask one-of fl-ends with [xcor = left-fl] [create-link-with one-of other fl-ends with [xcor = left-fl]]
     ]
 end
 
@@ -284,8 +282,8 @@ to update-force-and-velocity-and-links
     ;set new-fy (report-new-force "Y") + new-fy
   ]
     [; tension, compression
-      set new-fx new-fx + (report-new-force "X")
-      ;set new-fy new-fy + (report-new-force "X")
+      ;set new-fx new-fx + (report-new-force "X")
+      set new-fy new-fy + (report-new-force "X")
   ])
 
 
@@ -341,40 +339,46 @@ to-report report-new-force [ dir ] ; change to external force only
         report .001 * 1 /  distancexy xcor bottom-fl - .001 * 1 / distancexy xcor top-fl ] )
   ]
   force-mode = "Tension" [
-;       let dist-r distancexy right-fl ycor
+;      let dist-r distancexy right-fl ycor
 ;      if dist-r < 2 and dist-r > 1 [ set dist-r 1.1 ]
 ;      let dist-l distancexy left-fl ycor
 ;      if dist-r < 2 and dist-r > 1 [ set dist-l 1.1 ]
-;    report f-app * 1 / (dist-r) -  f-app * 1 / (dist-l)
+;      report f-app * 1 / (dist-r) -  f-app * 1 / (dist-l)
       ;report f-app * 1 / (distancexy right-fl ycor) -  f-app * 1 / (distancexy left-fl ycor )
      ;report (-1 * ex-force (distancexy right-fl ycor) + ex-force (distancexy left-fl ycor )) * 20
-      let dist-r distancexy right-fl ycor
+      ;let dist-r distancexy right-fl ycor
       ;if dist-r < 2 and dist-r > 1 [ set dist-r 1.1 ]
-      let dist-l distancexy left-fl ycor
+      ;let dist-l distancexy left-fl ycor
       ;if dist-r < 2 and dist-r > 1 [ set dist-l 1.1 ]
-;      let dist-r distancexy xcor right-fl
-;      let dist-l distancexy xcor left-fl
+      ; use for tension in y dir
+      let dist-r distancexy xcor right-fl
+      let dist-l distancexy xcor left-fl
       (ifelse dist-r < 3 [ report -1 * ex-force (dist-r)
-        ;report -1 * LJ-force (dist-r) * 5
+        ;report LJ-force (dist-r)
         ]
         dist-l < 3 [ report ex-force (dist-l)
-        ;report LJ-force (dist-l) * 5
+        ;report -1 * LJ-force (dist-l)
         ]
         [report 0 ])
-      ;report (-1 * ex-force (dist-r) + ex-force (dist-l))
+     ; report ( -1 * ex-force (dist-r) + ex-force (dist-l))
+      ;report (LJ-force (dist-r) - LJ-force (dist-l))
   ]
   force-mode = "Compression" [
     report f-app * 1 / (distancexy left-fl ycor ) - f-app * 1 / (distancexy right-fl ycor)
   ])
 end
 
-to-report LJ-force [ r ] ; optimize?
+to-report LJ-force [ r ] ; optimize? + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
 end
 
 to-report ex-force [ r ] ; optimize?
   ;report ( eps / r ) * ((sigma / r) ^ 6 - (1 / 2) * (sigma / r))
-  report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 10 ;* .5
+  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 35 + .3642
+  report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 45 + .465
+  ;report (100 * eps / r )* (.5 * (sigma / r) ^ 5 - (1 / 2) * (sigma / r) ^ 3)
+  ;report ( 10 * eps / r )* (.5 * (sigma / r) ^ 3 - (1 / 2) * (sigma / r) ^ 5)
+  ;report ( 20 * eps )* ( (sigma / r) ^ 8 - .5 * (sigma / r)) + .16
 end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
@@ -454,9 +458,9 @@ ticks
 30.0
 
 BUTTON
-9
+11
 194
-95
+97
 227
 NIL
 setup
@@ -506,7 +510,7 @@ system-temp
 system-temp
 0
 .75
-0.07
+0.13
 .01
 1
 NIL
@@ -521,7 +525,7 @@ f-app
 f-app
 0
 2
-0.16
+0.0
 .01
 1
 N
@@ -572,7 +576,7 @@ CHOOSER
 lattice-view
 lattice-view
 "large-atoms" "small-atoms" "hide-atoms"
-1
+0
 
 SWITCH
 835
@@ -616,7 +620,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-8.0
+11.0
 1
 1
 NIL
@@ -631,7 +635,7 @@ atoms-per-column
 atoms-per-column
 5
 25
-14.0
+13.0
 1
 1
 NIL
