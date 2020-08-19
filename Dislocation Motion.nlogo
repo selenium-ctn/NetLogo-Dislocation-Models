@@ -7,6 +7,7 @@ atoms-own [
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
   mass
+  barrier?
 ]
 
 globals [
@@ -85,9 +86,12 @@ to setup-atoms-and-links
     setxy xpos ypos
     set xpos xpos + x-dist
   ]
-  ask atoms with [xcor = min [xcor] of atoms] [die]
+  ;ask atoms with [xcor = min [xcor] of atoms] [die]
   ;ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
+  ;ask atoms with [(ycor >= max [ycor] of atoms - 4 or ycor <= min [ycor] of atoms + 4) and xcor <= max [xcor] of atoms - 5 and xcor >= min [xcor] of atoms + 5] [die]
   ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
+  ;ask atoms with [xcor = min [xcor] of atoms or xcor = min [xcor] of atoms + .5 or xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5] [set barrier? 1]
+  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set barrier? 1]
 
   ; values used in assigning atom positions
   let ymax max [ycor] of atoms
@@ -125,16 +129,17 @@ to setup-atoms-and-links
     color-links
   ]
 
+
   create-fl-ends 4
-;  set prev-right-fl max [xcor] of atoms +  1.018073 - .05 + .5
-;  set prev-left-fl min [xcor] of atoms -  1.018073 + .05 - .5
-;  set left-fl prev-left-fl - .05
-;  set right-fl prev-right-fl + .05
-  ; use code below for tension tests in y direction
-  set prev-right-fl max [ycor] of atoms +  1.018073 - .05 + .5
-  set prev-left-fl min [ycor] of atoms -  1.018073 + .05 - .5
+  set prev-right-fl max [xcor] of atoms +  1.018073 - .05 + .5
+  set prev-left-fl min [xcor] of atoms -  1.018073 + .05 - .5
   set left-fl prev-left-fl - .05
   set right-fl prev-right-fl + .05
+  ; use code below for tension tests in y direction
+;  set prev-right-fl max [ycor] of atoms +  1.018073 - .05 + .5
+;  set prev-left-fl min [ycor] of atoms -  1.018073 + .05 - .5
+;  set left-fl prev-left-fl - .05
+;  set right-fl prev-right-fl + .05
   ask one-of fl-ends with [xcor = 0 and ycor = 0] [
     set xcor right-fl
     set ycor 7 ]
@@ -191,6 +196,7 @@ to go
   ]
   set prev-lattice-view lattice-view
   tick-advance dt
+  update-plots
 end
 
 to update-lattice-view
@@ -234,8 +240,15 @@ to move  ; atom procedure, uses velocity-verlet algorithm
     ]
     [ ;; force-mode = "Tension" or "Compression"
       ; updating position
-      set xcor velocity-verlet-pos xcor vx (fx / mass)
-      set ycor velocity-verlet-pos ycor vy (fy / mass)
+    set xcor velocity-verlet-pos xcor vx (fx / mass)
+    set ycor velocity-verlet-pos ycor vy (fy / mass)
+;    ifelse barrier? = 0 [
+;      set xcor velocity-verlet-pos xcor vx (fx / mass)
+;      set ycor velocity-verlet-pos ycor vy (fy / mass)]
+;    [ifelse xcor < 0 [ set xcor xcor - .002
+;     set ycor ycor  ]
+;      [set xcor xcor + .002
+;    set ycor ycor]]
 
       ; force arrow updating
       if xcor > max-pxcor or xcor < min-pycor [
@@ -253,8 +266,8 @@ to calculate-fl-positions
 ;     set right-fl max [xcor] of atoms + .5
     let tmp-left left-fl
     let tmp-right right-fl
-    set left-fl prev-left-fl - .004
-    set right-fl prev-right-fl + .004
+    set left-fl prev-left-fl - .002
+    set right-fl prev-right-fl + .002
     set prev-left-fl tmp-left
     set prev-right-fl tmp-right
     ask fl-ends with [xcor = prev-right-fl] [ set xcor right-fl]
@@ -282,8 +295,8 @@ to update-force-and-velocity-and-links
     ;set new-fy (report-new-force "Y") + new-fy
   ]
     [; tension, compression
-      ;set new-fx new-fx + (report-new-force "X")
-      set new-fy new-fy + (report-new-force "X")
+      set new-fx new-fx + (report-new-force "X")
+      ;set new-fy new-fy + (report-new-force "X")
   ])
 
 
@@ -340,19 +353,20 @@ to-report report-new-force [ dir ] ; change to external force only
   ]
   force-mode = "Tension" [
 ;      let dist-r distancexy right-fl ycor
-;      if dist-r < 2 and dist-r > 1 [ set dist-r 1.1 ]
 ;      let dist-l distancexy left-fl ycor
-;      if dist-r < 2 and dist-r > 1 [ set dist-l 1.1 ]
-;      report f-app * 1 / (dist-r) -  f-app * 1 / (dist-l)
+;      (ifelse dist-r < 5 [ report f-app * 1 / (dist-r) ]
+;     dist-l < 5 [ report f-app * -1 / (dist-l) ]
+;        [report 0])
+      ;report f-app * 1 / (dist-r) -  f-app * 1 / (dist-l)
       ;report f-app * 1 / (distancexy right-fl ycor) -  f-app * 1 / (distancexy left-fl ycor )
      ;report (-1 * ex-force (distancexy right-fl ycor) + ex-force (distancexy left-fl ycor )) * 20
-      ;let dist-r distancexy right-fl ycor
+      let dist-r distancexy right-fl ycor
       ;if dist-r < 2 and dist-r > 1 [ set dist-r 1.1 ]
-      ;let dist-l distancexy left-fl ycor
+      let dist-l distancexy left-fl ycor
       ;if dist-r < 2 and dist-r > 1 [ set dist-l 1.1 ]
       ; use for tension in y dir
-      let dist-r distancexy xcor right-fl
-      let dist-l distancexy xcor left-fl
+;      let dist-r distancexy xcor right-fl
+;      let dist-l distancexy xcor left-fl
       (ifelse dist-r < 3 [ report -1 * ex-force (dist-r)
         ;report LJ-force (dist-r)
         ]
@@ -369,13 +383,16 @@ to-report report-new-force [ dir ] ; change to external force only
 end
 
 to-report LJ-force [ r ] ; optimize? + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
-  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6)
+  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
 end
 
 to-report ex-force [ r ] ; optimize?
   ;report ( eps / r ) * ((sigma / r) ^ 6 - (1 / 2) * (sigma / r))
-  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 35 + .3642
-  report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 45 + .465
+
+  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 10
+  report (((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 35 + .3642) * 2
+
+  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 45 + .465
   ;report (100 * eps / r )* (.5 * (sigma / r) ^ 5 - (1 / 2) * (sigma / r) ^ 3)
   ;report ( 10 * eps / r )* (.5 * (sigma / r) ^ 3 - (1 / 2) * (sigma / r) ^ 5)
   ;report ( 20 * eps )* ( (sigma / r) ^ 8 - .5 * (sigma / r)) + .16
@@ -525,7 +542,7 @@ f-app
 f-app
 0
 2
-0.0
+0.9
 .01
 1
 N
@@ -576,7 +593,7 @@ CHOOSER
 lattice-view
 lattice-view
 "large-atoms" "small-atoms" "hide-atoms"
-0
+1
 
 SWITCH
 835
@@ -620,7 +637,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-11.0
+12.0
 1
 1
 NIL
@@ -635,7 +652,7 @@ atoms-per-column
 atoms-per-column
 5
 25
-13.0
+10.0
 1
 1
 NIL
@@ -673,6 +690,24 @@ bulk-force?
 1
 1
 -1000
+
+PLOT
+853
+352
+1053
+502
+plot 1
+NIL
+NIL
+0.0
+15.0
+10.0
+0.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot [xcor] of min-one-of fl-ends [who]"
 
 @#$#@#$#@
 ## WHAT IS IT?
