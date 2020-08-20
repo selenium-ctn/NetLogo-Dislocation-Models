@@ -29,6 +29,7 @@ globals [
   right-fl ; tension/compression
   prev-left-fl
   prev-right-fl
+  orig-length
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -87,7 +88,7 @@ to setup-atoms-and-links
     setxy xpos ypos
     set xpos xpos + x-dist
   ]
-  ask atoms with [xcor = min [xcor] of atoms] [die]
+  ;ask atoms with [xcor = min [xcor] of atoms] [die]
   ;ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
   ;ask atoms with [(ycor >= max [ycor] of atoms - 4 or ycor <= min [ycor] of atoms + 4) and xcor <= max [xcor] of atoms - 5 and xcor >= min [xcor] of atoms + 5] [die]
   ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
@@ -138,6 +139,7 @@ to setup-atoms-and-links
   set prev-left-fl min [xcor] of atoms ;-  1.018073 + .1 ;- .5
   set left-fl prev-left-fl ;- .05
   set right-fl prev-right-fl ;+ .05
+  set orig-length right-fl - left-fl
   ; use code below for tension tests in y direction
 ;  set prev-right-fl max [ycor] of atoms +  1.018073 - .05 + .5
 ;  set prev-left-fl min [ycor] of atoms -  1.018073 + .05 - .5
@@ -274,8 +276,8 @@ to calculate-fl-positions
 ;    ;set right-fl prev-right-fl + .002
 ;    set prev-left-fl tmp-left
 ;    set prev-right-fl tmp-right
-    ask fl-ends with [xcor = prev-right-fl] [ set xcor right-fl]
-    ask fl-ends with [xcor = prev-left-fl] [ set xcor left-fl]
+    ask fl-ends with [xcor > 0] [ set xcor right-fl]
+    ask fl-ends with [xcor < 0] [ set xcor left-fl]
     ]
 end
 
@@ -380,7 +382,7 @@ to-report report-new-force [ dir ] ; change to external force only
 ;        [report 0 ])
      ; report ( -1 * ex-force (dist-r) + ex-force (dist-l))
       ;report (LJ-force (dist-r) - LJ-force (dist-l))
-      report -1 * f-app * 1 / ceiling (dist-l + .5) + f-app * 1 / atoms-per-row
+      report -1 * f-app * 1 / ceiling (dist-l + .5) + f-app * 1 / ceiling (right-fl - left-fl + .5)
   ]
   force-mode = "Compression" [
     report f-app * 1 / (distancexy left-fl ycor ) - f-app * 1 / (distancexy right-fl ycor)
@@ -437,6 +439,23 @@ end
 ;    [ let tmp extract-rgb white
 ;      set color insert-item 3 tmp 125 ])
 ;end
+
+to-report strain ; dc? true strain?
+  report ((right-fl - left-fl) - orig-length) / orig-length
+end
+
+to-report stress
+  let xcor-vals (range left-fl right-fl)
+  let min-A 10000000
+  let min-A-xcor 0
+  foreach xcor-vals [ x ->
+    let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+    let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+    if tmp-max-y - tmp-min-y < min-A [ set min-A-xcor x
+      set min-A tmp-max-y - tmp-min-y ]
+  ]
+  report (f-app / min-A) * 100
+end
 
 to color-links ; difficult to see......
   let min-eq-bond-len .995
@@ -532,7 +551,7 @@ system-temp
 system-temp
 0
 .75
-0.13
+0.45
 .01
 1
 NIL
@@ -547,7 +566,7 @@ f-app
 f-app
 0
 2
-0.25
+0.19
 .01
 1
 N
@@ -713,6 +732,24 @@ false
 "" ""
 PENS
 "default" 1.0 0 -16777216 true "" "plot [xcor] of min-one-of fl-ends [who]"
+
+PLOT
+855
+536
+1055
+686
+plot 2
+strain
+stress
+0.0
+0.01
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plotxy strain stress"
 
 @#$#@#$#@
 ## WHAT IS IT?
