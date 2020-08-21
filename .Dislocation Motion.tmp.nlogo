@@ -27,9 +27,12 @@ globals [
   bottom-fl
   left-fl ; tension/compression
   right-fl ; tension/compression
-  prev-left-fl
-  prev-right-fl
+  ;prev-left-fl
+  ;prev-right-fl
   orig-length
+  prev-length
+  f-app-auto
+  f-app-prev
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -88,8 +91,8 @@ to setup-atoms-and-links
     setxy xpos ypos
     set xpos xpos + x-dist
   ]
-  ;ask atoms with [xcor = min [xcor] of atoms] [die]
-  ;ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
+  ask atoms with [xcor = min [xcor] of atoms] [die]
+  ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
   ;ask atoms with [(ycor >= max [ycor] of atoms - 4 or ycor <= min [ycor] of atoms + 4) and xcor <= max [xcor] of atoms - 5 and xcor >= min [xcor] of atoms + 5] [die]
   ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
   ;ask atoms with [xcor = min [xcor] of atoms or xcor = min [xcor] of atoms + .5 or xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5] [set barrier? 1]
@@ -103,7 +106,6 @@ to setup-atoms-and-links
   let median-ycor (median [ycor] of atoms)
   ;ask atoms with [xcor <= median-xcor and xcor >= median-xcor - .5 and ycor <= median-ycor and ycor >= median-ycor - .5] [die]
 
-  ;set f-disloc-adjust 0
   if create-dislocation? [ ; creating the dislocation
     let curr-y-cor median [ycor] of atoms
     let curr-x-cor median [xcor] of atoms
@@ -121,7 +123,6 @@ to setup-atoms-and-links
       set curr-x-cor curr-x-cor - x-dist / 2
       set ii ii + 1
     ]
-    ;set f-disloc-adjust 1
    ]
 
   ask atoms [
@@ -135,10 +136,10 @@ to setup-atoms-and-links
 
 
   create-fl-ends 4
-  set prev-right-fl max [xcor] of atoms ;+  1.018073 - .1 ;+ .5
-  set prev-left-fl min [xcor] of atoms ;-  1.018073 + .1 ;- .5
-  set left-fl prev-left-fl ;- .05
-  set right-fl prev-right-fl ;+ .05
+  ;set prev-right-fl max [xcor] of atoms ;+  1.018073 - .1 ;+ .5
+  ;set prev-left-fl min [xcor] of atoms ;-  1.018073 + .1 ;- .5
+  set left-fl min [xcor] of atoms ;- .05
+  set right-fl max [xcor] of atoms ;+ .05
   set orig-length right-fl - left-fl
   ; use code below for tension tests in y direction
 ;  set prev-right-fl max [ycor] of atoms +  1.018073 - .05 + .5
@@ -159,6 +160,8 @@ to setup-atoms-and-links
     set xcor left-fl
     set ycor -7
     create-link-with one-of other fl-ends with [xcor = left-fl]]
+  set prev-length orig-length
+  set f-app-auto f-app
 end
 
 
@@ -192,6 +195,7 @@ to go
     move
   ]
   calculate-fl-positions
+  check-eq-adj-force
   ask atoms [
     update-force-and-velocity-and-links
   ]
@@ -202,6 +206,13 @@ to go
   set prev-lattice-view lattice-view
   tick-advance dt
   update-plots
+end
+
+to check-eq-adj-force
+  if f-app != f-app-prev [ set f-app-auto f-app ]
+  if precision prev-length 3 = precision (right-fl - left-fl) 3 [ set f-app-auto f-app-auto + .01 ]
+  set prev-length (right-fl - left-fl)
+  set f-app-prev f-app
 end
 
 to update-lattice-view
@@ -247,6 +258,15 @@ to move  ; atom procedure, uses velocity-verlet algorithm
       ; updating position
 ;    set xcor velocity-verlet-pos xcor vx (fx / mass)
 ;    set ycor velocity-verlet-pos ycor vy (fy / mass)
+;    ifelse barrier? = 0 [
+;      (ifelse xcor >= left-fl and xcor <= left-fl + 1 [
+;        set xcor xcor - .0001
+;        set ycor ycor ]
+;
+;      [set xcor velocity-verlet-pos xcor vx (fx / mass)
+;          set ycor velocity-verlet-pos ycor vy (fy / mass)])]
+
+
     ifelse barrier? = 0 [
       set xcor velocity-verlet-pos xcor vx (fx / mass)
       set ycor velocity-verlet-pos ycor vy (fy / mass)]
@@ -382,10 +402,17 @@ to-report report-new-force [ dir ] ; change to external force only
 ;        [report 0 ])
      ; report ( -1 * ex-force (dist-r) + ex-force (dist-l))
       ;report (LJ-force (dist-r) - LJ-force (dist-l))
-      report -1 * f-app * 1 / ceiling (dist-l + .5) + f-app * 1 / ceiling (right-fl - left-fl + .5)
+
+      ifelse dist-l <= force-cutoff [ ; ceiling vs no ceiling?
+        ;report -1 * f-app-auto * 1 / (dist-l + .5) + f-app-auto * 1 / (force-cutoff + .5)]
+        report -1 * f-app-auto * 1 / round (dist-l + .51) + f-app-auto * 1 / round (force-cutoff + .51)]
+        [report 0 ]
   ]
   force-mode = "Compression" [
-    report f-app * 1 / (distancexy left-fl ycor ) - f-app * 1 / (distancexy right-fl ycor)
+    let dist-l distancexy left-fl ycor
+     ifelse dist-l <= force-cutoff [ ; ceiling vs no ceiling?
+        report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
+        [report 0 ]
   ])
 end
 
@@ -454,7 +481,7 @@ to-report stress
     if tmp-max-y - tmp-min-y < min-A [ set min-A-xcor x
       set min-A tmp-max-y - tmp-min-y ]
   ]
-  report (f-app / min-A
+  report (f-app-auto / min-A) * 100
 end
 
 to color-links ; difficult to see......
@@ -551,7 +578,7 @@ system-temp
 system-temp
 0
 .75
-0.13
+0.19
 .01
 1
 NIL
@@ -566,7 +593,7 @@ f-app
 f-app
 0
 2
-0.19
+0.03
 .01
 1
 N
@@ -661,7 +688,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-14.0
+13.0
 1
 1
 NIL
@@ -704,45 +731,16 @@ f-app-vert-per-atom * 100
 1
 11
 
-SWITCH
-22
-438
-139
-471
-bulk-force?
-bulk-force?
-1
-1
--1000
-
 PLOT
-853
-352
-1053
-502
-plot 1
-NIL
-NIL
-0.0
-15.0
-10.0
-0.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -16777216 true "" "plot [xcor] of min-one-of fl-ends [who]"
-
-PLOT
-855
-536
-1055
-686
+834
+328
+1034
+478
 plot 2
 strain
 stress
 0.0
-0.01
+2.0
 0.0
 10.0
 true
@@ -750,6 +748,43 @@ false
 "" ""
 PENS
 "default" 1.0 0 -16777216 true "" "plotxy strain stress"
+
+SLIDER
+12
+420
+184
+453
+force-cutoff
+force-cutoff
+0
+orig-length
+4.0
+.5
+1
+NIL
+HORIZONTAL
+
+MONITOR
+842
+507
+915
+552
+NIL
+f-app-auto
+5
+1
+11
+
+MONITOR
+958
+509
+1015
+554
+length
+right-fl - left-fl
+5
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
