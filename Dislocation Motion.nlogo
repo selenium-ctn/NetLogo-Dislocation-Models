@@ -17,8 +17,6 @@ globals [
   dt ; time step for the velocity verlet algorithm
   sqrt-2-kb-over-m  ; constant
   cone-check-dist ; each atom links with neighbors within this distance
-  f-app-per-atom ; The magnitude of force felt by each individual atom that f-app is directly acting on
-  f-app-vert-per-atom ; The magnitude of force felt by each individual atom that the f-app-vert is directly acting on
   prev-lattice-view ; the lattice view in the previous time step
   upper-left-fl ; upper left force line -- shear
   left-fl ; tension
@@ -28,6 +26,7 @@ globals [
   f-app-auto
   f-app-prev
   total-external-force
+  reported-ex-force
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -52,6 +51,7 @@ to setup
 end
 
 to setup-atoms-and-links
+  if force-mode = "Tension" and atoms-per-column mod 2 = 0 [ set atoms-per-column atoms-per-column + 1]
   create-atoms atoms-per-row * atoms-per-column [
     set shape "circle"
     set color blue
@@ -92,18 +92,16 @@ to setup-atoms-and-links
       ask atoms with [xcor = min [xcor] of atoms] [die]
       set xmin min [xcor] of atoms
       ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
+      ask atoms with [(ycor >= max [ycor] of atoms - 1 or ycor <= min [ycor] of atoms + 1) and xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5] [die]
       ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
+
+
+
     ]
   force-mode = "Compression" [
       ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
     ]
   )
-
-  ;ask atoms with [(ycor >= max [ycor] of atoms - 4 or ycor <= min [ycor] of atoms + 4) and xcor <= max [xcor] of atoms - 5 and xcor >= min [xcor] of atoms + 5] [die]
-  ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
-  ;ask atoms with [xcor = min [xcor] of atoms or xcor = min [xcor] of atoms + .5 or xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5] [set pinned? 1]
-  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set pinned? 1]
-  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set pinned? 1]
 
   if create-dislocation? [ ; creating the dislocation
     let curr-y-cor median [ycor] of atoms
@@ -216,7 +214,7 @@ to go
     move
   ]
   calculate-fl-positions
-  check-eq-adj-force
+  if force-mode = "Tension" [ check-eq-adj-force ]
   ask atoms [
     update-force-and-velocity-and-links
   ]
@@ -224,6 +222,7 @@ to go
     set thickness .25
     color-links
   ]
+  set reported-ex-force total-external-force
   set prev-lattice-view lattice-view
   tick-advance dt
   update-plots
@@ -364,16 +363,16 @@ to-report report-new-force ; change to external force only
     ]
   force-mode = "Tension" [
       let dist-l distancexy left-fl ycor
-      ifelse dist-l <= force-cutoff [ ; round vs no round?
+      ifelse dist-l <= 4 [ ; round vs no round?
        ; report -1 * f-app-auto * 1 / (dist-l + .5) + f-app-auto * 1 / (force-cutoff + .5)]
         ;report -1 * f-app-auto * 1 / round (dist-l + .51) + f-app-auto * 1 / round (force-cutoff + .51)
-      report -1 * f-app-auto / 10]
+        report -1 * f-app-auto / 10]
         [report 0 ]
     ]
   force-mode = "Compression" [ ; this vs just force?
     let dist-l distancexy left-fl ycor
      ifelse dist-l <= 1[ ; ceiling vs no ceiling?
-        report f-app-auto * 1 / (dist-l + .5) - f-app-auto * 1 / (force-cutoff + .5)]
+        report f-app-auto * 1 / (dist-l + .5) - f-app-auto * 1 / (1 + .5)]
         ;report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
         ;report f-app-auto]
         [report 0 ]
@@ -396,29 +395,6 @@ end
 to set-color [v]
   set color scale-color blue sqrt(v) -.3 1.7
 end
-
-;to color-links ; pending update
-;  let min-eq-bond-len .995
-;  let max-eq-bond-len 1.018073
-;  (ifelse
-;    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) -.05 .35 ]
-;    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) -.05 .35 ]
-;    [ set color gray ])
-;end
-
-;to color-links ; difficult to see......
-;  let min-eq-bond-len .995
-;  let max-eq-bond-len 1.018073
-;  (ifelse
-;    link-length < min-eq-bond-len [
-;      let tmp extract-rgb scale-color red sqrt(min-eq-bond-len - link-length) .9 0
-;      set color insert-item 3 tmp (125 + (min-eq-bond-len - link-length) * 250) ]
-;    link-length > max-eq-bond-len [
-;      let tmp extract-rgb scale-color yellow sqrt (link-length - max-eq-bond-len) .9 0
-;      set color insert-item 3 tmp (125 + (link-length - max-eq-bond-len) * 250)]
-;    [ let tmp extract-rgb white
-;      set color insert-item 3 tmp 125 ])
-;end
 
 to-report strain ; dc? true strain?
   report ((right-fl - left-fl) - orig-length) / orig-length
@@ -450,6 +426,29 @@ to color-links ; difficult to see......
     [ let tmp extract-rgb white
       set color insert-item 3 tmp 125 ])
 end
+
+;to color-links ; pending update
+;  let min-eq-bond-len .995
+;  let max-eq-bond-len 1.018073
+;  (ifelse
+;    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) -.05 .35 ]
+;    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) -.05 .35 ]
+;    [ set color gray ])
+;end
+
+;to color-links ; difficult to see......
+;  let min-eq-bond-len .995
+;  let max-eq-bond-len 1.018073
+;  (ifelse
+;    link-length < min-eq-bond-len [
+;      let tmp extract-rgb scale-color red sqrt(min-eq-bond-len - link-length) .9 0
+;      set color insert-item 3 tmp (125 + (min-eq-bond-len - link-length) * 250) ]
+;    link-length > max-eq-bond-len [
+;      let tmp extract-rgb scale-color yellow sqrt (link-length - max-eq-bond-len) .9 0
+;      set color insert-item 3 tmp (125 + (link-length - max-eq-bond-len) * 250)]
+;    [ let tmp extract-rgb white
+;      set color insert-item 3 tmp 125 ])
+;end
 @#$#@#$#@
 GRAPHICS-WINDOW
 192
@@ -520,7 +519,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
 12
@@ -531,7 +530,7 @@ system-temp
 system-temp
 0
 .75
-0.19
+0.06
 .01
 1
 NIL
@@ -546,7 +545,7 @@ f-app
 f-app
 0
 2
-0.08
+0.71
 .01
 1
 N
@@ -574,7 +573,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -640,8 +639,8 @@ SLIDER
 atoms-per-row
 atoms-per-row
 5
-25
-13.0
+20
+12.0
 1
 1
 NIL
@@ -655,31 +654,20 @@ SLIDER
 atoms-per-column
 atoms-per-column
 5
-25
-11.0
+20
+12.0
 1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-844
-199
-963
-244
-f-app-per-atom (N)
-f-app-per-atom
-3
-1
-11
-
-MONITOR
-843
-258
-995
-303
-f-app-vert-per-atom (cN)
-f-app-vert-per-atom * 100
+834
+191
+986
+236
+total external force
+reported-ex-force
 3
 1
 11
@@ -689,7 +677,7 @@ PLOT
 328
 1034
 478
-plot 2
+Stress-Strain Curve - Tension
 strain
 stress
 0.0
@@ -700,22 +688,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plotxy strain stress"
-
-SLIDER
-12
-420
-184
-453
-force-cutoff
-force-cutoff
-0
-orig-length
-4.0
-.5
-1
-NIL
-HORIZONTAL
+"default" 1.0 0 -16777216 true "" "if force-mode = \"Tension\" [ plotxy strain stress ]"
 
 MONITOR
 842
