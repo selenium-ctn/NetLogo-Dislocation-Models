@@ -27,6 +27,7 @@ globals [
   prev-length
   f-app-auto
   f-app-prev
+  total-external-force
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -89,6 +90,7 @@ to setup-atoms-and-links
     ]
     force-mode = "Tension"[ ; refine shape once you decide what ratio of neck to shoulder you want
       ask atoms with [xcor = min [xcor] of atoms] [die]
+      set xmin min [xcor] of atoms
       ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
       ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
     ]
@@ -131,33 +133,60 @@ to setup-atoms-and-links
     color-links
   ]
 
-  if force-mode = "Tension" or force-mode = "Compression" [ ; is there a better way to do this fl assignment?
+  ifelse force-mode != "Shear" [ ; is there a better way to do this fl assignment?
     create-fl-ends 4
-    set left-fl min [xcor] of atoms
-    set right-fl max [xcor] of atoms
+    set left-fl xmin
+    set right-fl xmax
     set orig-length right-fl - left-fl
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor right-fl
-      set ycor 7 ]
+      set ycor ymax + 2 ]
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor right-fl
-      set ycor -7
+      set ycor ymin - 2
       create-link-with one-of other fl-ends with [xcor = right-fl]]
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor left-fl
-      set ycor 7 ]
+      set ycor ymax + 2 ]
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor left-fl
-      set ycor -7
+      set ycor ymin - 2
       create-link-with one-of other fl-ends with [xcor = left-fl]]
-    ask fl-ends [ hide-turtle ]
-    ask links with [ is-fl-end? one-of both-ends ] [
-      set color white
-      set thickness .25
+    ifelse force-mode = "Tension" [
+      ask fl-ends [
+        set color white
+        ifelse xcor < 0 [ set heading 270 ]
+        [set heading 90]
+      ]
+    ]
+    [
+      ask fl-ends [
+        set color white
+        ifelse xcor < 0 [ set heading 90 ]
+          [set heading 270]
+      ]
     ]
     set prev-length orig-length
     set f-app-auto f-app
   ]
+  [
+    create-fl-ends 2
+    set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ]
+    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+      set xcor upper-left-fl
+      set ycor ymax + 2 ]
+    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+      set xcor upper-left-fl
+      set ycor median [ycor] of atoms
+      create-link-with one-of other fl-ends]
+    ask fl-ends [
+      set color white
+      set heading 90 ]
+  ]
+  ask links with [ is-fl-end? one-of both-ends ] [
+      set color white
+      set thickness .25
+    ]
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
@@ -180,6 +209,7 @@ end
 
 to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
+  set total-external-force 0
   control-temp
   ask links with [ is-atom? one-of both-ends ] [die]
   ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
@@ -197,13 +227,6 @@ to go
   set prev-lattice-view lattice-view
   tick-advance dt
   update-plots
-end
-
-to check-eq-adj-force
-  if f-app != f-app-prev [ set f-app-auto f-app ]
-  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app-auto f-app-auto + .01 ]
-  set prev-length (right-fl - left-fl)
-  set f-app-prev f-app
 end
 
 to update-lattice-view
@@ -258,11 +281,19 @@ end
 to calculate-fl-positions
   ifelse force-mode = "Shear" [
     set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ]
+    ask fl-ends [ set xcor upper-left-fl]
   ]
   [ ; force-mode = tension or compression
     set left-fl min [xcor] of atoms
     ask fl-ends with [xcor < 0] [ set xcor left-fl]
     ]
+end
+
+to check-eq-adj-force
+  if f-app != f-app-prev [ set f-app-auto f-app ]
+  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app-auto f-app-auto + .01 ]
+  set prev-length (right-fl - left-fl)
+  set f-app-prev f-app
 end
 
 to update-force-and-velocity-and-links
@@ -280,7 +311,9 @@ to update-force-and-velocity-and-links
     ]
 
   ; adjusting the forces to account for any external applied forces
-  set new-fx report-new-force + new-fx
+  let ex-force report-new-force
+  set new-fx ex-force + new-fx
+  set total-external-force total-external-force + ex-force
 
   ; updating velocity and force
   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
@@ -340,7 +373,7 @@ to-report report-new-force ; change to external force only
   force-mode = "Compression" [ ; this vs just force?
     let dist-l distancexy left-fl ycor
      ifelse dist-l <= 1[ ; ceiling vs no ceiling?
-        ;report f-app-auto * 1 / (dist-l + .5) - f-app-auto * 1 / (force-cutoff + .5)]
+        report f-app-auto * 1 / (dist-l + .5) - f-app-auto * 1 / (force-cutoff + .5)]
         ;report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
         ;report f-app-auto]
         [report 0 ]
@@ -392,16 +425,26 @@ to-report strain ; dc? true strain?
 end
 
 to-report stress ;!= 0.....ok?
+;  let xcor-vals (range left-fl right-fl)
+;  let min-A 10000000
+;  let min-A-xcor 0
+;  foreach xcor-vals [ x ->
+;    let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+;    let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+;    if tmp-max-y - tmp-min-y < min-A and tmp-max-y - tmp-min-y != 0 [ set min-A-xcor x
+;      set min-A tmp-max-y - tmp-min-y ]
+;  ]
+;  report (abs(total-external-force) / min-A) * 100
   let xcor-vals (range left-fl right-fl)
   let min-A 10000000
   let min-A-xcor 0
   foreach xcor-vals [ x ->
-    let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
-    let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+    let tmp-min-y [ycor] of min-one-of links with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+    let tmp-max-y [ycor] of max-one-of link with [xcor >= x - .5 and xcor <= x + .5] [ycor]
     if tmp-max-y - tmp-min-y < min-A and tmp-max-y - tmp-min-y != 0 [ set min-A-xcor x
       set min-A tmp-max-y - tmp-min-y ]
   ]
-  report (f-app-auto / min-A) * 100
+  report (abs(total-external-force) / min-A) * 100
 end
 
 to color-links ; difficult to see......
@@ -487,7 +530,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-2
+1
 
 SLIDER
 12
@@ -513,7 +556,7 @@ f-app
 f-app
 0
 2
-1.41
+0.08
 .01
 1
 N
@@ -608,7 +651,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-12.0
+13.0
 1
 1
 NIL
@@ -623,7 +666,7 @@ atoms-per-column
 atoms-per-column
 5
 25
-12.0
+11.0
 1
 1
 NIL
@@ -660,9 +703,9 @@ plot 2
 strain
 stress
 0.0
-2.0
+0.5
 0.0
-10.0
+20.0
 true
 false
 "" ""
