@@ -27,6 +27,7 @@ globals [
   f-app-prev
   total-external-force
   reported-ex-force
+  median-ycor
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -81,7 +82,7 @@ to setup-atoms-and-links
   let ymin min [ycor] of atoms
   let xmin min [xcor] of atoms
   let median-xcor (median [xcor] of atoms)
-  let median-ycor (median [ycor] of atoms)
+  set median-ycor (median [ycor] of atoms)
 
   (ifelse force-mode = "Shear"[
     ask atoms with [ ((xcor = xmin or xcor = xmin + (1 / 2) or xcor = xmax or xcor = xmax - (1 / 2)) and ( ycor < median-ycor))] [
@@ -279,7 +280,7 @@ end
 
 to calculate-fl-positions
   ifelse force-mode = "Shear" [
-    set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ]
+    set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor + .25 ]
     ask fl-ends [ set xcor upper-left-fl]
   ]
   [ ; force-mode = tension or compression
@@ -303,7 +304,7 @@ to update-force-and-velocity-and-links
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
     let r distance myself
     let force LJ-force r
-    set total-force total-force + abs(force) ; keep track of this for visualization (coloring the atoms based on their potential energy -- since we do abs(force), that corresponds to PE
+    set total-force total-force + abs(force) ; keep track of this for visualization (coloring the atoms based on their potential energy -- since we do abs(force), that corresponds to PE)
     face myself
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
@@ -355,7 +356,7 @@ end
 
 to-report report-new-force ; change to external force only
   (ifelse force-mode = "Shear" [
-    ifelse ycor >= median [ycor] of atoms and xcor >= upper-left-fl and xcor <= upper-left-fl + .5 [
+    ifelse ycor >= median-ycor + .25 and xcor >= upper-left-fl and xcor <= upper-left-fl + .85 [
       ;report f-app * 1 / distancexy upper-left-fl ycor
        report f-app
     ]
@@ -519,7 +520,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 12
@@ -530,7 +531,7 @@ system-temp
 system-temp
 0
 .75
-0.06
+0.24
 .01
 1
 NIL
@@ -543,21 +544,6 @@ SLIDER
 364
 f-app
 f-app
-0
-2
-0.71
-.01
-1
-N
-HORIZONTAL
-
-SLIDER
-12
-374
-184
-407
-f-app-vert
-f-app-vert
 0
 2
 0.0
@@ -573,7 +559,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -640,7 +626,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-12.0
+14.0
 1
 1
 NIL
@@ -655,7 +641,7 @@ atoms-per-column
 atoms-per-column
 5
 20
-12.0
+11.0
 1
 1
 NIL
@@ -674,14 +660,14 @@ reported-ex-force
 
 PLOT
 834
-328
+254
 1034
-478
+404
 Stress-Strain Curve - Tension
 strain
 stress
 0.0
-0.5
+0.1
 0.0
 20.0
 true
@@ -692,9 +678,9 @@ PENS
 
 MONITOR
 842
-507
+433
 915
-552
+478
 NIL
 f-app-auto
 5
@@ -703,9 +689,9 @@ f-app-auto
 
 MONITOR
 958
-509
+435
 1015
-554
+480
 length
 right-fl - left-fl
 5
