@@ -7,7 +7,7 @@ atoms-own [
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
   mass
-  barrier?
+  pinned?
 ]
 
 globals [
@@ -21,14 +21,8 @@ globals [
   f-app-vert-per-atom ; The magnitude of force felt by each individual atom that the f-app-vert is directly acting on
   prev-lattice-view ; the lattice view in the previous time step
   upper-left-fl ; upper left force line -- shear
-  top-fl ; top force line (vert force)
-  lower-left-fl
-  lower-right-fl
-  bottom-fl
-  left-fl ; tension/compression
-  right-fl ; tension/compression
-  ;prev-left-fl
-  ;prev-right-fl
+  left-fl ; tension
+  right-fl ; tension
   orig-length
   prev-length
   f-app-auto
@@ -41,8 +35,6 @@ globals [
 
 to setup
   clear-all
-  ;resize-world-init
-  ;set eps .07
   set eps .07
   set sigma .907
   set cutoff-dist 5
@@ -50,23 +42,13 @@ to setup
   set sqrt-2-kb-over-m (1 / 20)
   set cone-check-dist 1.5
   setup-atoms-and-links
-  ;resize-world-bulk-mode
-  ;setup-atoms-and-links
   init-velocity
   if lattice-view = "hide-atoms" [
     ask atoms [ hide-turtle ]
   ]
-;  set lower-left-fl min [xcor] of atoms with [ ycor < median [ycor] of atoms ] - .01
-;  set lower-right-fl max [xcor] of atoms with [ ycor < median [ycor] of atoms ] + .01
-;  set top-fl max [ycor] of atoms + .005
-;  set bottom-fl min [ycor] of atoms - .005
   reset-timer
   reset-ticks
 end
-
-;to resize-world-init
-;  resize-world -15 15 -15 15
-;end
 
 to setup-atoms-and-links
   create-atoms atoms-per-row * atoms-per-column [
@@ -91,20 +73,35 @@ to setup-atoms-and-links
     setxy xpos ypos
     set xpos xpos + x-dist
   ]
-  ask atoms with [xcor = min [xcor] of atoms] [die]
-  ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
-  ;ask atoms with [(ycor >= max [ycor] of atoms - 4 or ycor <= min [ycor] of atoms + 4) and xcor <= max [xcor] of atoms - 5 and xcor >= min [xcor] of atoms + 5] [die]
-  ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
-  ;ask atoms with [xcor = min [xcor] of atoms or xcor = min [xcor] of atoms + .5 or xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5] [set barrier? 1]
-  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set barrier? 1]
-  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set barrier? 1]
-  ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set barrier? 1]
 
   ; values used in assigning atom positions
   let ymax max [ycor] of atoms
+  let xmax max [xcor] of atoms
+  let ymin min [ycor] of atoms
+  let xmin min [xcor] of atoms
   let median-xcor (median [xcor] of atoms)
   let median-ycor (median [ycor] of atoms)
-  ;ask atoms with [xcor <= median-xcor and xcor >= median-xcor - .5 and ycor <= median-ycor and ycor >= median-ycor - .5] [die]
+
+  (ifelse force-mode = "Shear"[
+    ask atoms with [ ((xcor = xmin or xcor = xmin + (1 / 2) or xcor = xmax or xcor = xmax - (1 / 2)) and ( ycor < median-ycor))] [
+      set pinned? 1
+    ]
+    ]
+    force-mode = "Tension"[ ; refine shape once you decide what ratio of neck to shoulder you want
+      ask atoms with [xcor = min [xcor] of atoms] [die]
+      ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
+      ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
+    ]
+  force-mode = "Compression" [
+      ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
+    ]
+  )
+
+  ;ask atoms with [(ycor >= max [ycor] of atoms - 4 or ycor <= min [ycor] of atoms + 4) and xcor <= max [xcor] of atoms - 5 and xcor >= min [xcor] of atoms + 5] [die]
+  ;ask atoms with [(xcor >= max [xcor] of atoms - 2 or xcor <= min [xcor] of atoms + 2) and ycor <= max [ycor] of atoms - 4 and ycor >= min [ycor] of atoms + 4] [die]
+  ;ask atoms with [xcor = min [xcor] of atoms or xcor = min [xcor] of atoms + .5 or xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5] [set pinned? 1]
+  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set pinned? 1]
+  ;ask atoms with [(xcor >= min [xcor] of atoms and xcor < min [xcor] of atoms + 4) or (xcor <= max [xcor] of atoms and xcor > max [xcor] of atoms - 4)] [set pinned? 1]
 
   if create-dislocation? [ ; creating the dislocation
     let curr-y-cor median [ycor] of atoms
@@ -134,37 +131,34 @@ to setup-atoms-and-links
     color-links
   ]
 
-
-  create-fl-ends 4
-  ;set prev-right-fl max [xcor] of atoms ;+  1.018073 - .1 ;+ .5
-  ;set prev-left-fl min [xcor] of atoms ;-  1.018073 + .1 ;- .5
-  set left-fl min [xcor] of atoms ;- .05
-  set right-fl max [xcor] of atoms ;+ .05
-  set orig-length right-fl - left-fl
-  ; use code below for tension tests in y direction
-;  set prev-right-fl max [ycor] of atoms +  1.018073 - .05 + .5
-;  set prev-left-fl min [ycor] of atoms -  1.018073 + .05 - .5
-;  set left-fl prev-left-fl - .05
-;  set right-fl prev-right-fl + .05
-  ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-    set xcor right-fl
-    set ycor 7 ]
-  ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-    set xcor right-fl
-    set ycor -7
-    create-link-with one-of other fl-ends with [xcor = right-fl]]
-  ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-    set xcor left-fl
-    set ycor 7 ]
-  ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-    set xcor left-fl
-    set ycor -7
-    create-link-with one-of other fl-ends with [xcor = left-fl]]
-  set prev-length orig-length
-  set f-app-auto f-app
+  if force-mode = "Tension" or force-mode = "Compression" [ ; is there a better way to do this fl assignment?
+    create-fl-ends 4
+    set left-fl min [xcor] of atoms
+    set right-fl max [xcor] of atoms
+    set orig-length right-fl - left-fl
+    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+      set xcor right-fl
+      set ycor 7 ]
+    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+      set xcor right-fl
+      set ycor -7
+      create-link-with one-of other fl-ends with [xcor = right-fl]]
+    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+      set xcor left-fl
+      set ycor 7 ]
+    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+      set xcor left-fl
+      set ycor -7
+      create-link-with one-of other fl-ends with [xcor = left-fl]]
+    ask fl-ends [ hide-turtle ]
+    ask links with [ is-fl-end? one-of both-ends ] [
+      set color white
+      set thickness .25
+    ]
+    set prev-length orig-length
+    set f-app-auto f-app
+  ]
 end
-
-
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
                  ; velocity split between the x velocity and the y velocity
@@ -179,9 +173,6 @@ to-report positive-or-negative
   report ifelse-value random 2 = 0 [-1] [1]
 end
 
-;to resize-world-bulk-mode
-;  resize-world (min [xcor] of atoms - .5) (max [xcor] of atoms + .5) (min [ycor] of atoms - .5) (max [ycor] of atoms + .5)
-;end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Runtime Procedures ;;
@@ -210,7 +201,7 @@ end
 
 to check-eq-adj-force
   if f-app != f-app-prev [ set f-app-auto f-app ]
-  if precision prev-length 3 = precision (right-fl - left-fl) 3 [ set f-app-auto f-app-auto + .01 ]
+  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app-auto f-app-auto + .01 ]
   set prev-length (right-fl - left-fl)
   set f-app-prev f-app
 end
@@ -246,38 +237,19 @@ to control-temp ; this heats or cools the system based on the average temperatur
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
-    ifelse force-mode = "Shear" [
-        set xcor velocity-verlet-pos xcor vx (fx / mass)
-        set ycor velocity-verlet-pos ycor vy (fy / mass)
-        if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
-         die ; kills atoms when they move off the world
-        ]
-      ;]
-    ]
-    [ ;; force-mode = "Tension" or "Compression"
-      ; updating position
-;    set xcor velocity-verlet-pos xcor vx (fx / mass)
-;    set ycor velocity-verlet-pos ycor vy (fy / mass)
-;    ifelse barrier? = 0 [
-;      (ifelse xcor >= left-fl and xcor <= left-fl + 1 [
-;        set xcor xcor - .0001
-;        set ycor ycor ]
-;
-;      [set xcor velocity-verlet-pos xcor vx (fx / mass)
-;          set ycor velocity-verlet-pos ycor vy (fy / mass)])]
-
-
-    ifelse barrier? = 0 [
+  ifelse force-mode = "Shear" [
+    if pinned? = 0 [
       set xcor velocity-verlet-pos xcor vx (fx / mass)
       set ycor velocity-verlet-pos ycor vy (fy / mass)]
-    [ ;ifelse xcor < 0 [ set xcor xcor - .001
-;     set ycor ycor  ]
-;      [set xcor xcor + .001
-;    set ycor ycor]
+    if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
+      die ; kills atoms when they move off the world
     ]
-
-      ; force arrow updating
-      if xcor > max-pxcor or xcor < min-pycor [
+  ]
+  [ ;; force-mode = "Tension" or "Compression"
+    if pinned? = 0 [
+      set xcor velocity-verlet-pos xcor vx (fx / mass)
+      set ycor velocity-verlet-pos ycor vy (fy / mass)]
+      if xcor > max-pxcor or xcor < min-pxcor [
         die ; kills atoms when they move off the world
       ]
    ]
@@ -285,18 +257,10 @@ end
 
 to calculate-fl-positions
   ifelse force-mode = "Shear" [
-    set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ] - .5
+    set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ]
   ]
   [ ; force-mode = tension or compression
     set left-fl min [xcor] of atoms
-    set right-fl max [xcor] of atoms
-;    let tmp-left left-fl
-;    let tmp-right right-fl
-;    set left-fl prev-left-fl - .002
-;    ;set right-fl prev-right-fl + .002
-;    set prev-left-fl tmp-left
-;    set prev-right-fl tmp-right
-    ask fl-ends with [xcor > 0] [ set xcor right-fl]
     ask fl-ends with [xcor < 0] [ set xcor left-fl]
     ]
 end
@@ -316,15 +280,7 @@ to update-force-and-velocity-and-links
     ]
 
   ; adjusting the forces to account for any external applied forces
-  (ifelse force-mode = "Shear" [
-    set new-fx (report-new-force "X") + new-fx
-    ;set new-fy (report-new-force "Y") + new-fy
-  ]
-    [; tension, compression
-      set new-fx new-fx + (report-new-force "X")
-      ;set new-fy new-fy + (report-new-force "X")
-  ])
-
+  set new-fx report-new-force + new-fx
 
   ; updating velocity and force
   set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
@@ -365,71 +321,35 @@ to link-with-atoms-in-cone [atom-set]
     ]
 end
 
-to-report report-new-force [ dir ] ; change to external force only
+to-report report-new-force ; change to external force only
   (ifelse force-mode = "Shear" [
-    (ifelse dir = "X" [
-    ifelse ycor >= median [ycor] of atoms [
-      report f-app * 1 / distancexy upper-left-fl ycor
+    ifelse ycor >= median [ycor] of atoms and xcor >= upper-left-fl and xcor <= upper-left-fl + .5 [
+      ;report f-app * 1 / distancexy upper-left-fl ycor
+       report f-app
     ]
-    [ report .0000001 * 1 / (distancexy lower-left-fl ycor) - .0000001 * 1 / (distancexy lower-right-fl ycor) ]
-        ;report .001 * 1 / (distancexy lower-left-fl ycor) ^ 2 - .001 * 1 / (distancexy lower-right-fl ycor) ^ 2 ]
-      ]
-     dir = "Y" [
-        report .001 * 1 /  distancexy xcor bottom-fl - .001 * 1 / distancexy xcor top-fl ] )
-  ]
+    [ report 0]
+    ]
   force-mode = "Tension" [
-;      let dist-r distancexy right-fl ycor
-;      let dist-l distancexy left-fl ycor
-;      (ifelse dist-r < 5 [ report f-app * 1 / (dist-r) ]
-;     dist-l < 5 [ report f-app * -1 / (dist-l) ]
-;        [report 0])
-      ;report f-app * 1 / (dist-r) -  f-app * 1 / (dist-l)
-      ;report f-app * 1 / (distancexy right-fl ycor) -  f-app * 1 / (distancexy left-fl ycor )
-     ;report (-1 * ex-force (distancexy right-fl ycor) + ex-force (distancexy left-fl ycor )) * 20
-;      let dist-r distancexy right-fl ycor
-;      if dist-r < 2 and dist-r > 1.2 [ set dist-r dist-r + .5 ]
       let dist-l distancexy left-fl ycor
-;      if dist-r < 2 and dist-r > 1.2 [ set dist-l dist-l - .5 ]
-;      ; use for tension in y dir
-;;      let dist-r distancexy xcor right-fl
-;;      let dist-l distancexy xcor left-fl
-;      (ifelse dist-r < 2 [ ;report -1 * ex-force (dist-r)
-;        report -1 * LJ-force (dist-r) * 2.1
-;        ]
-;        dist-l < 2 [ ;report ex-force (dist-l)
-;        report LJ-force (dist-l) * 2.1
-;        ]
-;        [report 0 ])
-     ; report ( -1 * ex-force (dist-r) + ex-force (dist-l))
-      ;report (LJ-force (dist-r) - LJ-force (dist-l))
-
-      ifelse dist-l <= force-cutoff [ ; ceiling vs no ceiling?
-        ;report -1 * f-app-auto * 1 / (dist-l + .5) + f-app-auto * 1 / (force-cutoff + .5)]
-        report -1 * f-app-auto * 1 / round (dist-l + .51) + f-app-auto * 1 / round (force-cutoff + .51)]
+      ifelse dist-l <= force-cutoff [ ; round vs no round?
+       ; report -1 * f-app-auto * 1 / (dist-l + .5) + f-app-auto * 1 / (force-cutoff + .5)]
+        ;report -1 * f-app-auto * 1 / round (dist-l + .51) + f-app-auto * 1 / round (force-cutoff + .51)
+      report -1 * f-app-auto / 10]
         [report 0 ]
-  ]
-  force-mode = "Compression" [
+    ]
+  force-mode = "Compression" [ ; this vs just force?
     let dist-l distancexy left-fl ycor
-     ifelse dist-l <= force-cutoff [ ; ceiling vs no ceiling?
-        report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
+     ifelse dist-l <= 1[ ; ceiling vs no ceiling?
+        ;report f-app-auto * 1 / (dist-l + .5) - f-app-auto * 1 / (force-cutoff + .5)]
+        ;report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
+        ;report f-app-auto]
         [report 0 ]
-  ])
+    ]
+  )
 end
 
 to-report LJ-force [ r ] ; optimize? + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
   report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
-end
-
-to-report ex-force [ r ] ; optimize?
-  ;report ( eps / r ) * ((sigma / r) ^ 6 - (1 / 2) * (sigma / r))
-
-  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 10
-  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r) * eps * 35 + .3642)
-
-  ;report ((sigma / r) ^ 5 - (1 / 2) * (sigma / r)) * eps * 45 + .465
-  ;report (100 * eps / r )* (.5 * (sigma / r) ^ 5 - (1 / 2) * (sigma / r) ^ 3)
-  ;report ( 10 * eps / r )* (.5 * (sigma / r) ^ 3 - (1 / 2) * (sigma / r) ^ 5)
-  ;report ( 20 * eps )* ( (sigma / r) ^ 8 - .5 * (sigma / r)) + .16
 end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
@@ -471,14 +391,14 @@ to-report strain ; dc? true strain?
   report ((right-fl - left-fl) - orig-length) / orig-length
 end
 
-to-report stress
+to-report stress ;!= 0.....ok?
   let xcor-vals (range left-fl right-fl)
   let min-A 10000000
   let min-A-xcor 0
   foreach xcor-vals [ x ->
     let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
     let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
-    if tmp-max-y - tmp-min-y < min-A [ set min-A-xcor x
+    if tmp-max-y - tmp-min-y < min-A and tmp-max-y - tmp-min-y != 0 [ set min-A-xcor x
       set min-A tmp-max-y - tmp-min-y ]
   ]
   report (f-app-auto / min-A) * 100
@@ -567,7 +487,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+2
 
 SLIDER
 12
@@ -593,7 +513,7 @@ f-app
 f-app
 0
 2
-0.03
+1.41
 .01
 1
 N
@@ -688,7 +608,7 @@ atoms-per-row
 atoms-per-row
 5
 25
-13.0
+12.0
 1
 1
 NIL
@@ -703,7 +623,7 @@ atoms-per-column
 atoms-per-column
 5
 25
-11.0
+12.0
 1
 1
 NIL
