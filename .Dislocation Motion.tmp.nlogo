@@ -28,6 +28,8 @@ globals [
   total-external-force
   reported-ex-force
   median-ycor
+  top-neck-atoms
+  bottom-neck-atoms
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -92,12 +94,13 @@ to setup-atoms-and-links
     force-mode = "Tension"[ ; refine shape once you decide what ratio of neck to shoulder you want
       ask atoms with [xcor = min [xcor] of atoms] [die]
       set xmin min [xcor] of atoms
-      ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
+      ;ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
       ask atoms with [(ycor >= max [ycor] of atoms - 1 or ycor <= min [ycor] of atoms + 1) and xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5] [die]
       ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
-
-
-
+      let max-ycor-neck max [ycor] of (atoms with [ xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5])
+      let min-ycor-neck min [ycor] of (atoms with [ xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5])
+      set top-neck-atoms atoms with [xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5 and ycor = max-ycor-neck]
+      set bottom-neck-atoms atoms with [xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5 and ycor = min-ycor-neck]
     ]
   force-mode = "Compression" [
       ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
@@ -133,17 +136,10 @@ to setup-atoms-and-links
   ]
 
   ifelse force-mode != "Shear" [ ; is there a better way to do this fl assignment?
-    create-fl-ends 4
+    create-fl-ends 2
     set left-fl xmin
     set right-fl xmax
     set orig-length right-fl - left-fl
-    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-      set xcor right-fl
-      set ycor ymax + 2 ]
-    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-      set xcor right-fl
-      set ycor ymin - 2
-      create-link-with one-of other fl-ends with [xcor = right-fl]]
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor left-fl
       set ycor ymax + 2 ]
@@ -154,22 +150,20 @@ to setup-atoms-and-links
     ifelse force-mode = "Tension" [
       ask fl-ends [
         set color white
-        ifelse xcor < 0 [ set heading 270 ]
-        [set heading 90]
+        set heading 270
       ]
     ]
     [
       ask fl-ends [
         set color white
-        ifelse xcor < 0 [ set heading 90 ]
-          [set heading 270]
+        set heading 90
       ]
     ]
     set prev-length orig-length
     set f-app-auto f-app
   ]
   [
-    create-fl-ends 2
+    create-fl-ends
     set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ]
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor upper-left-fl
@@ -184,8 +178,9 @@ to setup-atoms-and-links
   ]
   ask links with [ is-fl-end? one-of both-ends ] [
       set color white
-      set thickness .25
+      ;set thickness .25
     ]
+  ask atoms with [pinned? = 1] [ set shape "circle 2"]
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
@@ -280,7 +275,7 @@ end
 
 to calculate-fl-positions
   ifelse force-mode = "Shear" [
-    set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor + .25 ]
+    set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor ] ;+ .25 ]
     ask fl-ends [ set xcor upper-left-fl]
   ]
   [ ; force-mode = tension or compression
@@ -321,7 +316,8 @@ to update-force-and-velocity-and-links
   set fx new-fx
   set fy new-fy
 
-  update-atom-color total-force
+  ifelse ex-force = 0 [update-atom-color total-force]
+  [set color white]
   update-links in-radius-atoms
 end
 
@@ -356,7 +352,7 @@ end
 
 to-report report-new-force ; change to external force only
   (ifelse force-mode = "Shear" [
-    ifelse ycor >= median-ycor + .25 and xcor >= upper-left-fl and xcor <= upper-left-fl + .85 [
+    ifelse ycor >= median-ycor and xcor >= upper-left-fl and xcor <= upper-left-fl + .85 [
       ;report f-app * 1 / distancexy upper-left-fl ycor
        report f-app
     ]
@@ -364,7 +360,7 @@ to-report report-new-force ; change to external force only
     ]
   force-mode = "Tension" [
       let dist-l distancexy left-fl ycor
-      ifelse dist-l <= 4 [ ; round vs no round?
+      ifelse dist-l <= 3.5 [ ; round vs no round?
        ; report -1 * f-app-auto * 1 / (dist-l + .5) + f-app-auto * 1 / (force-cutoff + .5)]
         ;report -1 * f-app-auto * 1 / round (dist-l + .51) + f-app-auto * 1 / round (force-cutoff + .51)
         report -1 * f-app-auto / 10]
@@ -372,8 +368,8 @@ to-report report-new-force ; change to external force only
     ]
   force-mode = "Compression" [ ; this vs just force?
     let dist-l distancexy left-fl ycor
-     ifelse dist-l <= 1[ ; ceiling vs no ceiling?
-        report f-app-auto * 1 / (dist-l + .5) - f-app-auto * 1 / (1 + .5)]
+     ifelse dist-l <= 1 [ ; ceiling vs no ceiling?
+        report (f-app * 1 / (dist-l + .5) - f-app * 1 / (1 + .5))]
         ;report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
         ;report f-app-auto]
         [report 0 ]
@@ -402,15 +398,22 @@ to-report strain ; dc? true strain?
 end
 
 to-report stress ;!= 0.....ok?
-  let xcor-vals (range left-fl right-fl)
-  let min-A 10000000
-  let min-A-xcor 0
-  foreach xcor-vals [ x ->
-    let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
-    let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
-    if tmp-max-y - tmp-min-y < min-A and tmp-max-y - tmp-min-y != 0 [ set min-A-xcor x
-      set min-A tmp-max-y - tmp-min-y ]
-  ]
+;  let xcor-vals (range left-fl right-fl)
+;  let min-A 10000000
+;  let min-A-xcor 0
+;  foreach xcor-vals [ x ->
+;    let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+;    let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
+;    if tmp-max-y - tmp-min-y < min-A and tmp-max-y - tmp-min-y != 0 [ set min-A-xcor x
+;      set min-A tmp-max-y - tmp-min-y ]
+;  ]
+;  show min-A-xcor
+;  ask atoms [ ifelse xcor >= min-A-xcor - .5 and xcor <= min-A-xcor + .5 [ set color red] [ set color blue]]
+;  report (abs(total-external-force) / min-A) * 100
+
+  let avg-max mean [ycor] of top-neck-atoms
+  let avg-min mean [ycor] of bottom-neck-atoms
+  let min-A avg-max - avg-min
   report (abs(total-external-force) / min-A) * 100
 end
 
@@ -466,7 +469,7 @@ GRAPHICS-WINDOW
 1
 0
 1
-1
+0
 1
 -15
 15
@@ -520,7 +523,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
 12
@@ -531,7 +534,7 @@ system-temp
 system-temp
 0
 .75
-0.24
+0.23
 .01
 1
 NIL
@@ -546,7 +549,7 @@ f-app
 f-app
 0
 2
-0.0
+0.64
 .01
 1
 N
@@ -559,7 +562,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -570,7 +573,7 @@ SWITCH
 53
 update-color?
 update-color?
-0
+1
 1
 -1000
 
@@ -626,7 +629,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-14.0
+12.0
 1
 1
 NIL
@@ -641,7 +644,7 @@ atoms-per-column
 atoms-per-column
 5
 20
-11.0
+10.0
 1
 1
 NIL
