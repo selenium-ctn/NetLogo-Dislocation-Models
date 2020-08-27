@@ -1,6 +1,8 @@
 extensions [profiler]
 breed [atoms atom]
-breed [fl-ends fl-end]s
+breed [fl-ends fl-end]
+undirected-link-breed [fl-links fl-link]
+undirected-link-breed [atom-links atom-link]
 
 atoms-own [
   fx     ; x-component of force vector
@@ -129,7 +131,7 @@ to setup-atoms-and-links
     let in-radius-atoms (other atoms in-radius cutoff-dist)
     update-links in-radius-atoms
   ]
-  ask links [ ; stylizing/coloring links
+  ask atom-links [ ; stylizing/coloring links
     set thickness .25
     color-links
   ]
@@ -145,7 +147,7 @@ to setup-atoms-and-links
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor left-fl
       set ycor ymin - 2
-      create-link-with one-of other fl-ends with [xcor = left-fl]]
+      create-fl-link-with one-of other fl-ends with [xcor = left-fl]]
     ask fl-ends [
       set color white
       ifelse force-mode = "Tension" [ set heading 270 ] [set heading 90 ]
@@ -163,12 +165,12 @@ to setup-atoms-and-links
       set xcor upper-left-fl
       set ycor median [ycor] of atoms
       hide-turtle
-      create-link-with one-of other fl-ends]
+      create-fl-link-with one-of other fl-ends]
     ask fl-ends [
       set color white
       set heading 90 ]
   ]
-  ask links with [ is-fl-end? one-of both-ends ] [
+  ask fl-links [
       set color white
     ]
   ask atoms with [pinned? = 1] [ set shape "circle-x"]
@@ -196,7 +198,7 @@ to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
   set total-external-force 0
   control-temp
-  ask links with [ is-atom? one-of both-ends ] [die]
+  ask atom-links [die]
   ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
     move
   ]
@@ -205,7 +207,7 @@ to go
   ask atoms [
     update-force-and-velocity-and-links
   ]
-  ask links with [is-atom? one-of both-ends ] [ ; stylizing/coloring links
+  ask atom-links [ ; stylizing/coloring links
     set thickness .25
     color-links
   ]
@@ -250,18 +252,15 @@ to move  ; atom procedure, uses velocity-verlet algorithm
     if pinned? = 0 [
       set xcor velocity-verlet-pos xcor vx (fx / mass)
       set ycor velocity-verlet-pos ycor vy (fy / mass)]
-    if xcor > max-pxcor [ ; kills force-arrows when their associated atoms move off the world
-      die ; kills atoms when they move off the world
-    ]
   ]
   [ ;; force-mode = "Tension" or "Compression"
     if pinned? = 0 [
       set xcor velocity-verlet-pos xcor vx (fx / mass)
       set ycor velocity-verlet-pos ycor vy (fy / mass)]
-      if xcor > max-pxcor or xcor < min-pxcor [
-        die ; kills atoms when they move off the world
-      ]
-   ]
+  ]
+  if xcor > max-pxcor or xcor < min-pxcor [
+    die ; kills atoms when they move off the world
+  ]
 end
 
 to calculate-fl-positions
@@ -289,7 +288,7 @@ to update-force-and-velocity-and-links
   let in-radius-atoms (other atoms in-radius cutoff-dist)
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
     let r distance myself
-    let force LJ-force r
+    let force LJ-alt-force r ;LJ-force r
     set total-force total-force + abs(force) ; keep track of this for visualization (coloring the atoms based on their potential energy -- since we do abs(force), that corresponds to PE)
     face myself
     set new-fx new-fx + (force * dx)
@@ -338,15 +337,14 @@ end
 to link-with-atoms-in-cone [atom-set]
   let in-cone-atoms (atom-set in-cone cone-check-dist 60)
     if any? in-cone-atoms [
-      create-link-with min-one-of in-cone-atoms [distance myself]
+      create-atom-link-with min-one-of in-cone-atoms [distance myself]
     ]
 end
 
 to-report report-new-force ; change to external force only
   (ifelse force-mode = "Shear" [
     ifelse ycor >= median-ycor and xcor >= upper-left-fl and xcor <= upper-left-fl + .85 [
-      report f-app
-    ]
+      report f-app ]
     [ report 0]
     ]
   force-mode = "Tension" [
@@ -357,18 +355,21 @@ to-report report-new-force ; change to external force only
     ]
   force-mode = "Compression" [ ; this vs just force?
     let dist-l distancexy left-fl ycor
-     ifelse dist-l <= 1 [ ; ceiling vs no ceiling?
-        ;report (f-app * 1 / (dist-l + .5) - f-app * 1 / (1 + .5))]
-        ;report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
-        ;report f-app-auto]
+     ifelse dist-l <= 1 [
         report f-app ]
-        [report 0 ]
+      [report 0 ]
     ]
   )
 end
 
 to-report LJ-force [ r ] ; optimize? + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
-  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
+;  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
+;end
+
+to-report LJ-alt-force [ r ]
+  let third-pwr (sigma / r) ^ 3
+  let sixth-pwr third-pwr ^ 2
+  report (48 * eps / r )* (sixth-pwr ^ 2 - (1 / 2) * sixth-pwr) + .0001
 end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
@@ -383,31 +384,18 @@ to set-color [v]
   set color scale-color blue sqrt(v) -.3 1.7
 end
 
-to-report strain ; dc? true strain?
+to-report strain
   report ((right-fl - left-fl) - orig-length) / orig-length
 end
 
-to-report stress ;!= 0.....ok?
-;  let xcor-vals (range left-fl right-fl)
-;  let min-A 10000000
-;  let min-A-xcor 0
-;  foreach xcor-vals [ x ->
-;    let tmp-min-y [ycor] of min-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
-;    let tmp-max-y [ycor] of max-one-of atoms with [xcor >= x - .5 and xcor <= x + .5] [ycor]
-;    if tmp-max-y - tmp-min-y < min-A and tmp-max-y - tmp-min-y != 0 [ set min-A-xcor x
-;      set min-A tmp-max-y - tmp-min-y ]
-;  ]
-;  show min-A-xcor
-;  ask atoms [ ifelse xcor >= min-A-xcor - .5 and xcor <= min-A-xcor + .5 [ set color red] [ set color blue]]
-;  report (abs(total-external-force) / min-A) * 100
-
+to-report stress
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
-  report (abs(total-external-force) / min-A) * 100
+  report (abs(total-external-force) / min-A)
 end
 
-to color-links ; difficult to see......
+to color-links
   let min-eq-bond-len .995
   let max-eq-bond-len 1.018073
   (ifelse
@@ -420,29 +408,6 @@ to color-links ; difficult to see......
     [ let tmp extract-rgb white
       set color insert-item 3 tmp 125 ])
 end
-
-;to color-links ; pending update
-;  let min-eq-bond-len .995
-;  let max-eq-bond-len 1.018073
-;  (ifelse
-;    link-length < min-eq-bond-len [ set color scale-color red sqrt (min-eq-bond-len - link-length) -.05 .35 ]
-;    link-length > max-eq-bond-len [ set color scale-color yellow sqrt (link-length - max-eq-bond-len) -.05 .35 ]
-;    [ set color gray ])
-;end
-
-;to color-links ; difficult to see......
-;  let min-eq-bond-len .995
-;  let max-eq-bond-len 1.018073
-;  (ifelse
-;    link-length < min-eq-bond-len [
-;      let tmp extract-rgb scale-color red sqrt(min-eq-bond-len - link-length) .9 0
-;      set color insert-item 3 tmp (125 + (min-eq-bond-len - link-length) * 250) ]
-;    link-length > max-eq-bond-len [
-;      let tmp extract-rgb scale-color yellow sqrt (link-length - max-eq-bond-len) .9 0
-;      set color insert-item 3 tmp (125 + (link-length - max-eq-bond-len) * 250)]
-;    [ let tmp extract-rgb white
-;      set color insert-item 3 tmp 125 ])
-;end
 @#$#@#$#@
 GRAPHICS-WINDOW
 192
@@ -513,7 +478,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
 12
@@ -524,7 +489,7 @@ system-temp
 system-temp
 0
 .75
-0.23
+0.14
 .01
 1
 NIL
@@ -539,7 +504,7 @@ f-app
 f-app
 0
 3
-0.19
+0.73
 .01
 1
 N
@@ -552,7 +517,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -619,7 +584,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-16.0
+14.0
 1
 1
 NIL
@@ -662,7 +627,7 @@ stress
 0.0
 0.1
 0.0
-20.0
+0.2
 true
 false
 "" ""
