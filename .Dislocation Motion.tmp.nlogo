@@ -1,5 +1,6 @@
+extensions [profiler]
 breed [atoms atom]
-breed [fl-ends fl-end]
+breed [fl-ends fl-end]s
 
 atoms-own [
   fx     ; x-component of force vector
@@ -7,7 +8,7 @@ atoms-own [
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
   mass
-  pinned?
+  pinned? ; 0 if the atom isn't pinned in place, 1 if it is (for boundaries)
 ]
 
 globals [
@@ -19,17 +20,17 @@ globals [
   cone-check-dist ; each atom links with neighbors within this distance
   prev-lattice-view ; the lattice view in the previous time step
   upper-left-fl ; upper left force line -- shear
-  left-fl ; tension
-  right-fl ; tension
-  orig-length
-  prev-length
-  f-app-auto
-  f-app-prev
-  total-external-force
-  reported-ex-force
-  median-ycor
-  top-neck-atoms
-  bottom-neck-atoms
+  left-fl ; left force line - tension, compression
+  right-fl ; right force line - tension, compression - doesn't actually move, but is used for calculations
+  orig-length ; original length of sample
+  prev-length ; length of sample in previous time step
+  f-app-auto ; current force applied when the force is being automatically increased
+  f-app-prev ; f-app from slider from previous time step; used for if the user manually increased f-app while the program is automatically increasing f-app internally
+  total-external-force ; sum of external forces acting on individual atoms
+  reported-ex-force ; total external force reported to monitor; necessary so monitor doesn't show total-internal-force calculations happening & only shows the end result
+  median-ycor ; median ycor of atoms from initial lattice setup
+  top-neck-atoms ; agentset of atoms on the top of the neck (thin region) (tension)
+  bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension)
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -91,19 +92,17 @@ to setup-atoms-and-links
       set pinned? 1
     ]
     ]
-    force-mode = "Tension"[ ; refine shape once you decide what ratio of neck to shoulder you want
-      ask atoms with [xcor = min [xcor] of atoms] [die]
+    force-mode = "Tension"[
+      ask atoms with [xcor = xmin] [die] ; creating the shape
       set xmin min [xcor] of atoms
-      ;ask atoms with [(ycor >= max [ycor] of atoms - 2 or ycor <= min [ycor] of atoms + 2) and xcor <= max [xcor] of atoms - 4 and xcor >= min [xcor] of atoms + 4] [die]
-      ask atoms with [(ycor >= max [ycor] of atoms - 1 or ycor <= min [ycor] of atoms + 1) and xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5] [die]
-      ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
-      let max-ycor-neck max [ycor] of (atoms with [ xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5])
-      let min-ycor-neck min [ycor] of (atoms with [ xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5])
-      set top-neck-atoms atoms with [xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5 and ycor = max-ycor-neck]
-      set bottom-neck-atoms atoms with [xcor <= max [xcor] of atoms - 3.5 and xcor >= min [xcor] of atoms + 3.5 and ycor = min-ycor-neck]
+      ask atoms with [(ycor >= ymax - 1 or ycor <= ymin + 1) and xcor <= xmax - 3.5 and xcor >= xmin + 3.5] [die]
+      ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? 1]
+
+      set top-neck-atoms atoms with [xcor <= xmax - 3.5 and xcor >= xmin + 3.5] with-max [ycor] ; defining top and bottom neck agentsets
+      set bottom-neck-atoms atoms with [xcor <= xmax - 3.5 and xcor >= xmin + 3.5] with-min [ycor]
     ]
   force-mode = "Compression" [
-      ask atoms with [xcor = max [xcor] of atoms or xcor = max [xcor] of atoms - .5 ] [set pinned? 1]
+      ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? 1]
     ]
   )
 
@@ -147,23 +146,15 @@ to setup-atoms-and-links
       set xcor left-fl
       set ycor ymin - 2
       create-link-with one-of other fl-ends with [xcor = left-fl]]
-    ifelse force-mode = "Tension" [
-      ask fl-ends [
-        set color white
-        set heading 270
-      ]
-    ]
-    [
-      ask fl-ends [
-        set color white
-        set heading 90
-      ]
+    ask fl-ends [
+      set color white
+      ifelse force-mode = "Tension" [ set heading 270 ] [set heading 90 ]
     ]
     set prev-length orig-length
     set f-app-auto f-app
   ]
   [
-    create-fl-ends
+    create-fl-ends 2
     set upper-left-fl min [xcor] of atoms with [ ycor >= median [ycor] of atoms ]
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor upper-left-fl
@@ -171,6 +162,7 @@ to setup-atoms-and-links
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor upper-left-fl
       set ycor median [ycor] of atoms
+      hide-turtle
       create-link-with one-of other fl-ends]
     ask fl-ends [
       set color white
@@ -178,9 +170,8 @@ to setup-atoms-and-links
   ]
   ask links with [ is-fl-end? one-of both-ends ] [
       set color white
-      ;set thickness .25
     ]
-  ask atoms with [pinned? = 1] [ set shape "circle 2"]
+  ask atoms with [pinned? = 1] [ set shape "circle-x"]
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
@@ -275,7 +266,7 @@ end
 
 to calculate-fl-positions
   ifelse force-mode = "Shear" [
-    set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor ] ;+ .25 ]
+    set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor ]
     ask fl-ends [ set xcor upper-left-fl]
   ]
   [ ; force-mode = tension or compression
@@ -316,8 +307,9 @@ to update-force-and-velocity-and-links
   set fx new-fx
   set fy new-fy
 
-  ifelse ex-force = 0 [update-atom-color total-force]
-  [set color white]
+  ifelse ex-force = 0 and pinned? = 0 [set shape "circle"]
+  [set shape "circle-x"]
+  update-atom-color total-force
   update-links in-radius-atoms
 end
 
@@ -353,25 +345,23 @@ end
 to-report report-new-force ; change to external force only
   (ifelse force-mode = "Shear" [
     ifelse ycor >= median-ycor and xcor >= upper-left-fl and xcor <= upper-left-fl + .85 [
-      ;report f-app * 1 / distancexy upper-left-fl ycor
-       report f-app
+      report f-app
     ]
     [ report 0]
     ]
   force-mode = "Tension" [
       let dist-l distancexy left-fl ycor
-      ifelse dist-l <= 3.5 [ ; round vs no round?
-       ; report -1 * f-app-auto * 1 / (dist-l + .5) + f-app-auto * 1 / (force-cutoff + .5)]
-        ;report -1 * f-app-auto * 1 / round (dist-l + .51) + f-app-auto * 1 / round (force-cutoff + .51)
+      ifelse dist-l <= 3.5 [
         report -1 * f-app-auto / 10]
-        [report 0 ]
+      [report 0 ]
     ]
   force-mode = "Compression" [ ; this vs just force?
     let dist-l distancexy left-fl ycor
      ifelse dist-l <= 1 [ ; ceiling vs no ceiling?
-        report (f-app * 1 / (dist-l + .5) - f-app * 1 / (1 + .5))]
+        ;report (f-app * 1 / (dist-l + .5) - f-app * 1 / (1 + .5))]
         ;report f-app-auto * 1 / round (dist-l + .51) - f-app-auto * 1 / round (force-cutoff + .51)]
         ;report f-app-auto]
+        report f-app ]
         [report 0 ]
     ]
   )
@@ -523,7 +513,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 12
@@ -548,8 +538,8 @@ SLIDER
 f-app
 f-app
 0
-2
-0.64
+3
+0.19
 .01
 1
 N
@@ -562,7 +552,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -573,7 +563,7 @@ SWITCH
 53
 update-color?
 update-color?
-1
+0
 1
 -1000
 
@@ -629,7 +619,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-12.0
+16.0
 1
 1
 NIL
@@ -644,7 +634,7 @@ atoms-per-column
 atoms-per-column
 5
 20
-10.0
+13.0
 1
 1
 NIL
@@ -680,22 +670,22 @@ PENS
 "default" 1.0 0 -16777216 true "" "if force-mode = \"Tension\" [ plotxy strain stress ]"
 
 MONITOR
-842
-433
-915
-478
-NIL
+835
+423
+922
+468
+current f-app
 f-app-auto
 5
 1
 11
 
 MONITOR
-958
-435
-1015
-480
-length
+944
+423
+1033
+468
+sample length
 right-fl - left-fl
 5
 1
@@ -878,6 +868,13 @@ false
 0
 Circle -7500403 true true 0 0 300
 Circle -16777216 true false 30 30 240
+
+circle-x
+false
+0
+Circle -7500403 true true 0 0 300
+Rectangle -16777216 true false 0 120 315 165
+Rectangle -16777216 true false 135 -15 180 300
 
 cow
 false
