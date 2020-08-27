@@ -276,7 +276,7 @@ end
 
 to check-eq-adj-force
   if f-app != f-app-prev [ set f-app-auto f-app ]
-  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app-auto f-app-auto + .01 ]
+  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app-auto f-app-auto + .001 ]
   set prev-length (right-fl - left-fl)
   set f-app-prev f-app
 end
@@ -284,11 +284,11 @@ end
 to update-force-and-velocity-and-links
   let new-fx 0
   let new-fy 0
-  let total-force 0
+  let total-force 0let in-radius-atoms (other atoms in-radius cutoff-dist)
   let in-radius-atoms (other atoms in-radius cutoff-dist)
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
     let r distance myself
-    let force LJ-alt-force r ;LJ-force r
+    let force LJ-force r ;LJ-force r
     set total-force total-force + abs(force) ; keep track of this for visualization (coloring the atoms based on their potential energy -- since we do abs(force), that corresponds to PE)
     face myself
     set new-fx new-fx + (force * dx)
@@ -350,7 +350,7 @@ to-report report-new-force ; change to external force only
   force-mode = "Tension" [
       let dist-l distancexy left-fl ycor
       ifelse dist-l <= 3.5 [
-        report -1 * f-app-auto / 10]
+        report -1 * f-app-auto ]
       [report 0 ]
     ]
   force-mode = "Compression" [ ; this vs just force?
@@ -362,14 +362,11 @@ to-report report-new-force ; change to external force only
   )
 end
 
-to-report LJ-force [ r ] ; optimize? + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
-;  report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
-;end
-
-to-report LJ-alt-force [ r ]
+to-report LJ-force [ r ] ; + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
   let third-pwr (sigma / r) ^ 3
   let sixth-pwr third-pwr ^ 2
   report (48 * eps / r )* (sixth-pwr ^ 2 - (1 / 2) * sixth-pwr) + .0001
+  ;report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
 end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
@@ -400,13 +397,15 @@ to color-links
   let max-eq-bond-len 1.018073
   (ifelse
     link-length < min-eq-bond-len [
-      let tmp extract-rgb scale-color red sqrt(min-eq-bond-len - link-length) 1 -.2
-      set color insert-item 3 tmp (125 + (1 + sqrt(min-eq-bond-len - link-length)) * 30) ]
+      let tmp-len sqrt(min-eq-bond-len - link-length)
+      let tmp-color extract-rgb scale-color red tmp-len 1 -.2
+      set color insert-item 3 tmp-color (125 + (1 + tmp-len) * 30) ]
     link-length > max-eq-bond-len [
-      let tmp extract-rgb scale-color yellow sqrt (link-length - max-eq-bond-len) 1 -.2
-      set color insert-item 3 tmp (125 + (1 + sqrt(link-length - max-eq-bond-len)) * 30)]
-    [ let tmp extract-rgb white
-      set color insert-item 3 tmp 125 ])
+      let tmp-len sqrt (link-length - max-eq-bond-len)
+      let tmp-color extract-rgb scale-color yellow tmp-len 1 -.2
+      set color insert-item 3 tmp-color (125 + (1 + tmp-len) * 30)]
+    [ let tmp-color extract-rgb white
+      set color insert-item 3 tmp-color 125 ])
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -478,7 +477,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+2
 
 SLIDER
 12
@@ -504,7 +503,7 @@ f-app
 f-app
 0
 3
-0.73
+1.05
 .01
 1
 N
@@ -517,7 +516,7 @@ SWITCH
 98
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
@@ -584,7 +583,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-14.0
+13.0
 1
 1
 NIL
@@ -599,7 +598,7 @@ atoms-per-column
 atoms-per-column
 5
 20
-13.0
+12.0
 1
 1
 NIL
@@ -610,7 +609,7 @@ MONITOR
 191
 986
 236
-total external force
+total external force (N)
 reported-ex-force
 3
 1
@@ -627,7 +626,7 @@ stress
 0.0
 0.1
 0.0
-0.2
+0.1
 true
 false
 "" ""
@@ -635,21 +634,21 @@ PENS
 "default" 1.0 0 -16777216 true "" "if force-mode = \"Tension\" [ plotxy strain stress ]"
 
 MONITOR
-835
+837
 423
-922
+945
 468
-current f-app
+current f-app (N)
 f-app-auto
 5
 1
 11
 
 MONITOR
-944
-423
-1033
-468
+950
+422
+1039
+467
 sample length
 right-fl - left-fl
 5
