@@ -28,9 +28,8 @@ globals [
   prev-length ; length of sample in previous time step
   median-ycor ; median ycor of atoms from initial lattice setup
   top-neck-atoms ; agentset of atoms on the top of the neck (thin region) (tension). Used in calculating stress
-  bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stres
+  bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stress
   num-forced-atoms ; number of atoms receiving external force directly
-  ;total-external-force
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -97,11 +96,11 @@ to setup-atoms-and-links-and-fls
 
       set top-neck-atoms atoms with [xcor <= xmax - 3.5 and xcor >= xmin + 3.5] with-max [ycor] ; defining top and bottom neck agentsets
       set bottom-neck-atoms atoms with [xcor <= xmax - 3.5 and xcor >= xmin + 3.5] with-min [ycor]
-      ask atoms with [ xcor >= xmin and xcor <= xmin + 3 ][ ;3.5 ] [
+      ask atoms with [ xcor >= xmin and xcor <= xmin + 3 ][
         set ex-force-applied? True
         set shape "circle-dot"
       ]
-
+      set num-forced-atoms count atoms with [ex-force-applied? = True]
     ]
     force-mode = "Compression" [
       ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
@@ -132,7 +131,6 @@ to setup-atoms-and-links-and-fls
     update-links in-radius-atoms
   ]
   ask atom-links [ ; stylizing/coloring links
-    set thickness .25
     color-links
   ]
 
@@ -213,7 +211,6 @@ end
 
 to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
-  ;set total-external-force 0
   control-temp
   ask atom-links [die]
   ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
@@ -252,7 +249,7 @@ to update-lattice-view
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
-  let current-speed-avg mean [ sqrt (vx ^ 2 + vy ^ 2)] of atoms
+  let current-speed-avg mean [ sqrt (vx ^ 2 + vy ^ 2) ] of atoms
   let target-speed-avg sqrt-2-kb-over-m * sqrt system-temp
   let scaling-factor target-speed-avg / current-speed-avg
   if current-speed-avg != 0 [
@@ -273,7 +270,7 @@ to move  ; atom procedure, uses velocity-verlet algorithm
   ]
 end
 
-to calculate-fl-positions
+to calculate-fl-positions ; (calculate new force line positions)
   ifelse force-mode = "Shear" [
     set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor ]
     ask fl-ends [ set xcor upper-left-fl]
@@ -284,7 +281,7 @@ to calculate-fl-positions
   ]
 end
 
-to identify-force-atoms
+to identify-force-atoms ; (find the atoms closest to the force line that will be the ones receiving the external force)
   (ifelse force-mode = "Shear" [
     ask atoms [ set ex-force-applied?  False ]
     let forced-atoms atoms with [ ycor >= median-ycor and (distancexy upper-left-fl ycor) <= 1]
@@ -305,7 +302,8 @@ end
 
 
 to check-eq-adj-force ; (check equilibrium, adjust force)
-  if precision prev-length 6 = precision (right-edge - left-fl) 6 or prev-length > (right-edge - left-fl) [ set f-app precision (f-app + .01) 3 ] ; increments f-app-auto if the sample has reached an equilibrium
+  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .01) 3 ]
+  ; increments f-app-auto if the sample has reached an equilibrium
   set prev-length (right-edge - left-fl)
 end
 
@@ -324,18 +322,12 @@ to update-force-and-velocity-and-links
     set new-fy new-fy + (force * dy)
     ]
 
-;  if force-mode = "Tension" and new-fx > 0 [
-;    set total-external-force total-external-force + new-fx
-;    set new-fx 0
-;  ]
-
   if not pinned? [
     ; adjusting the forces to account for any external applied forces
     let ex-force 0
     if ex-force-applied? [ set ex-force report-new-force ]
     if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
     set new-fx ex-force + new-fx
-    ;set total-external-force total-external-force + ex-force
 
     ; updating velocity and force
     set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
@@ -380,7 +372,7 @@ end
 to-report report-new-force
   set shape "circle-dot"
   (ifelse force-mode = "Tension" [
-    ;report -1 * f-app-auto / num-forced-atoms
+
     report -1 * f-app / num-forced-atoms
     ]
     [ ; Shear and Compression
@@ -524,7 +516,7 @@ system-temp
 system-temp
 0
 .4
-0.336
+0.344
 .001
 1
 NIL
@@ -539,7 +531,7 @@ f-app
 f-app
 0
 30
-0.0
+1.82
 .1
 1
 N
