@@ -9,28 +9,26 @@ atoms-own [
   vx     ; x-component of velocity vector
   vy     ; y-component of velocity vector
   mass   ; mass of atom
-  pinned? ; 0 if the atom isn't pinned in place, 1 if it is (for boundaries)
-  ex-force-applied? ; is an external force directly applied to these atoms? 0 if no, 1 if yes
+  pinned? ; False if the atom isn't pinned in place, True if it is (for boundaries)
+  ex-force-applied? ; is an external force directly applied to this atom? False if no, True if yes
 ]
 
 globals [
-  eps ; used in LJ force
-  sigma ; used in LJ force
+  eps ; used in LJ force. Well depth; measure of how strongly particles attract each other
+  sigma ; used in LJ force. Distance at which intermolecular potential between 2 particles is 0
   cutoff-dist ; each atom is influenced by its neighbors within this distance (LJ force)
   dt ; time step for the velocity verlet algorithm
-  sqrt-2-kb-over-m  ; constant
-  cone-check-dist ; each atom links with neighbors within this distance
+  sqrt-2-kb-over-m  ; constant. Used when calculating the thermal velocity. Square root of (2 * boltzmann constant / m). Is not numerically accurate for this simulation.
+  link-check-dist ; each atom links with neighbors within this distance
   prev-lattice-view ; the lattice view in the previous time step
   upper-left-fl ; upper left force line - shear
   left-fl ; left force line - tension, compression
   right-fl ; right force line - tension, compression - doesn't actually move, but is used for calculations
   orig-length ; original length of sample
   prev-length ; length of sample in previous time step
-  f-app-auto ; current force applied when the force is being automatically increased
-  f-app-prev ; f-app from slider from previous time step; used for if the user manually increased f-app while the program is automatically increasing f-app internally
   median-ycor ; median ycor of atoms from initial lattice setup
-  top-neck-atoms ; agentset of atoms on the top of the neck (thin region) (tension)
-  bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension)
+  top-neck-atoms ; agentset of atoms on the top of the neck (thin region) (tension). Used in calculating stress
+  bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stres
   num-forced-atoms ; number of atoms receiving external force directly
 ]
 
@@ -44,16 +42,14 @@ to setup
   set sigma .907
   set cutoff-dist 5
   set dt .1
-  set sqrt-2-kb-over-m (1 / 20)
-  set cone-check-dist 1.5
+  set sqrt-2-kb-over-m (1 / 50)
+  set link-check-dist 1.5
   setup-atoms-and-links-and-fls
   init-velocity
-  if lattice-view = "hide-atoms" [
-    ask atoms [ hide-turtle ]
-  ]
   (ifelse force-mode = "Shear" [ set num-forced-atoms ceiling (atoms-per-column / 2) ]
-    force-mode = "Tension" [ set num-forced-atoms count atoms with [ ex-force-applied? = 1] ]
+    force-mode = "Tension" [ set num-forced-atoms count atoms with [ ex-force-applied? = True] ]
     force-mode = "Compression" [ set num-forced-atoms atoms-per-column])
+  update-lattice-view
   reset-timer
   reset-ticks
 end
@@ -64,9 +60,8 @@ to setup-atoms-and-links-and-fls
     set shape "circle"
     set color blue
     set mass 1
-    ifelse lattice-view = "small-atoms" [
-      set size .6 ]
-    [set size .9]
+    set pinned? False
+    set ex-force-applied? False
   ]
   let x-dist 1 ; the distance between atoms in the x direction
   let y-dist sqrt (x-dist ^ 2 - (x-dist / 2) ^ 2) ; the distance between rows
@@ -93,24 +88,24 @@ to setup-atoms-and-links-and-fls
 
   (ifelse force-mode = "Shear"[
     ask atoms with [ ((xcor = xmin or xcor = xmin + (1 / 2) or xcor = xmax or xcor = xmax - (1 / 2)) and ( ycor < median-ycor))] [
-      set pinned? 1
+      set pinned? True
     ]
     ]
     force-mode = "Tension"[
       ask atoms with [xcor = xmin] [die] ; creating the symmetrical shape
       set xmin min [xcor] of atoms
       ask atoms with [(ycor >= ymax - 1 or ycor <= ymin + 1) and xcor <= xmax - 3.5 and xcor >= xmin + 3.5] [die]
-      ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? 1]
+      ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
 
       set top-neck-atoms atoms with [xcor <= xmax - 3.5 and xcor >= xmin + 3.5] with-max [ycor] ; defining top and bottom neck agentsets
       set bottom-neck-atoms atoms with [xcor <= xmax - 3.5 and xcor >= xmin + 3.5] with-min [ycor]
-      ask atoms with [ xcor >= xmin and xcor <= xmin + ;3.5 ] [
-        set ex-force-applied? 1
-        set shape "circle-x"
+      ask atoms with [ xcor >= xmin and xcor <= xmin + 3 ][ ;3.5 ] [
+        set ex-force-applied? True
+        set shape "circle-dot"
       ]
     ]
     force-mode = "Compression" [
-      ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? 1]
+      ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
     ]
   )
 
@@ -142,7 +137,7 @@ to setup-atoms-and-links-and-fls
     color-links
   ]
 
-  (ifelse force-mode = "Tension" or force-mode = "Compression" [ ; set up force lines
+  (ifelse force-mode = "Tension"  [ ; set up force lines
     create-fl-ends 2
     set left-fl xmin
     set right-fl xmax
@@ -156,38 +151,54 @@ to setup-atoms-and-links-and-fls
       create-fl-link-with one-of other fl-ends with [xcor = left-fl]]
     ask fl-ends [
       set color white
-      ifelse force-mode = "Tension" [ set heading 270 ] [set heading 90 ]
+      set heading 270
     ]
     if force-mode = "Tension" [
       set prev-length orig-length
-      set f-app-auto f-app
     ]
   ]
-  force-mode = "Shear" [
-    create-fl-ends 2
-    set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor ]
-    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-      set xcor upper-left-fl
-      set ycor ymax + 2 ]
-    ask one-of fl-ends with [xcor = 0 and ycor = 0] [
-      set xcor upper-left-fl
-      set ycor median-ycor
-      hide-turtle
-      create-fl-link-with one-of other fl-ends]
-    ask fl-ends [
-      set color white
-      set heading 90 ]
+    force-mode = "Compression" [
+      create-fl-ends 2
+      set left-fl xmin
+      set right-fl xmax
+      set orig-length right-fl - left-fl
+      ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+        set xcor left-fl
+        set ycor max-pycor - 2 ]
+      ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+        set xcor left-fl
+        set ycor min-pycor + 2
+        create-fl-link-with one-of other fl-ends with [xcor = left-fl]]
+      ask fl-ends [
+        set color white
+        set heading 90
+      ]
+    ]
+    force-mode = "Shear" [
+      create-fl-ends 2
+      set upper-left-fl min [xcor] of atoms with [ ycor >= median-ycor ]
+      ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+        set xcor upper-left-fl
+        set ycor ymax + 2 ]
+      ask one-of fl-ends with [xcor = 0 and ycor = 0] [
+        set xcor upper-left-fl
+        set ycor median-ycor
+        hide-turtle
+        create-fl-link-with one-of other fl-ends]
+      ask fl-ends [
+        set color white
+        set heading 90 ]
   ])
   ask fl-links [
     set color white
   ]
-  ask atoms with [pinned? = 1] [ set shape "circle-x"]
+  ask atoms with [pinned? = True] [ set shape "circle-x"]
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
                  ; velocity split between the x velocity and the y velocity
   let speed-avg sqrt-2-kb-over-m * sqrt system-temp
-  ask atoms [
+  ask atoms with [pinned? = False] [
     let x-portion random-float 1
     set vx speed-avg * x-portion * positive-or-negative
     set vy speed-avg * (1 - x-portion) * positive-or-negative]
@@ -196,7 +207,6 @@ end
 to-report positive-or-negative
   report ifelse-value random 2 = 0 [-1] [1]
 end
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Runtime Procedures ;;
@@ -210,16 +220,14 @@ to go
     move
   ]
   calculate-fl-positions
-  if force-mode = "Tension" [ check-eq-adj-force ]
+  if force-mode = "Tension" and auto-increment-force? [ check-eq-adj-force ]
   identify-force-atoms
   ask atoms [
     update-force-and-velocity-and-links
   ]
   ask atom-links [ ; stylizing/coloring links
-    set thickness .25
     color-links
   ]
-  set prev-lattice-view lattice-view
   tick-advance dt
   update-plots
 end
@@ -240,6 +248,7 @@ to update-lattice-view
   [; lattice-view = hide-atoms
       ask atoms [ hide-turtle ]
   ])
+  set prev-lattice-view lattice-view
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
@@ -255,7 +264,7 @@ to control-temp ; this heats or cools the system based on the average temperatur
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
-  if pinned? = 0 [
+  if not pinned? [
     set xcor velocity-verlet-pos xcor vx (fx / mass)
     set ycor velocity-verlet-pos ycor vy (fy / mass)
   ]
@@ -277,90 +286,92 @@ end
 
 to identify-force-atoms
   (ifelse force-mode = "Shear" [
-    ask atoms [ set ex-force-applied?  0 ]
+    ask atoms [ set ex-force-applied?  False ]
     ask min-n-of num-forced-atoms atoms with [ ycor >= median-ycor ] [ distancexy upper-left-fl ycor] [
-      set ex-force-applied?  1
+      set ex-force-applied?  True
     ]
     ]
     force-mode = "Compression" [
-      ask atoms [ set ex-force-applied?  0 ]
+      ask atoms [ set ex-force-applied?  False ]
       ask min-n-of num-forced-atoms atoms [ distancexy left-fl ycor] [
-        set ex-force-applied?  1
+        set ex-force-applied?  True
     ]
   ]) ; for tension, the same atoms in the left shoulder of the sample always receive the force
 end
 
 
 to check-eq-adj-force ; (check equilibrium, adjust force)
-  if f-app != f-app-prev [ set f-app-auto f-app ] ; updates f-app-auto if the user manually changed f-app
-  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app-auto f-app-auto + .1 ] ; increments f-app-auto if the sample has reached an equilibrium
+  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app f-app + .1 ] ; increments f-app-auto if the sample has reached an equilibrium
   set prev-length (right-fl - left-fl)
-  set f-app-prev f-app
 end
 
 to update-force-and-velocity-and-links
   let new-fx 0
   let new-fy 0
-  let total-force 0
-  let in-radius-atoms (other atoms in-radius cutoff-dist)
+  let total-potential 0
+  let in-radius-atoms other atoms in-radius cutoff-dist
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
     let r distance myself
-    let force LJ-force r ;LJ-force r
-    set total-force total-force + abs(force) ; keep track of this for visualization (coloring the atoms based on their potential energy -- since we do abs(force), that corresponds to PE)
+    let indiv-poten-and-force (LJ-poten-and-force r)
+    let force item 1 indiv-poten-and-force
+    set total-potential total-potential + item 0 indiv-poten-and-force
     face myself
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
     ]
 
-  ; adjusting the forces to account for any external applied forces
-  let ex-force 0
-  if ex-force-applied? = 1 [ set ex-force report-new-force ]
-  if shape = "circle-x" and pinned? = 0 and ex-force-applied? = 0 [ set shape "circle" ]
-  set new-fx ex-force + new-fx
+  if not pinned? [
+    ; adjusting the forces to account for any external applied forces
+    let ex-force 0
+    if ex-force-applied? [ set ex-force report-new-force ]
+    if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
+    set new-fx ex-force + new-fx
 
-  ; updating velocity and force
-  set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
-  set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
-  set fx new-fx
-  set fy new-fy
+    ; updating velocity and force
+    set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+    set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+    set fx new-fx
+    set fy new-fy
+  ]
 
-  update-atom-color total-force
+  update-atom-color total-potential
   update-links in-radius-atoms
 end
 
 to update-atom-color [total-force] ; updating atom color
-  (ifelse update-color? [
+  (ifelse update-atom-color? [
     set-color total-force
   ]
    [ set color blue ])
 end
 
 to update-links [in-radius-atoms] ; updating links
-  if diagonal-right-links [
+  if show-diagonal-right-links? [
     set heading 330
     link-with-atoms-in-cone in-radius-atoms
   ]
-  if diagonal-left-links [
+  if show-diagonal-left-links? [
     set heading 30
     link-with-atoms-in-cone in-radius-atoms
   ]
-  if horizontal-links [
+  if show-horizontal-links? [
     set heading 90
     link-with-atoms-in-cone in-radius-atoms
   ]
 end
 
 to link-with-atoms-in-cone [atom-set]
-  let in-cone-atoms (atom-set in-cone cone-check-dist 60)
+  let in-cone-atoms (atom-set in-cone link-check-dist 60)
     if any? in-cone-atoms [
       create-atom-link-with min-one-of in-cone-atoms [distance myself]
     ]
 end
 
 to-report report-new-force
-  set shape "circle-x"
+  set shape "circle-dot"
   (ifelse force-mode = "Tension" [
-    report -1 * f-app-auto / num-forced-atoms
+    ;report -1 * f-app-auto / num-forced-atoms
+    report -1 * f-app / num-forced-atoms
     ]
     [ ; Shear and Compression
       report f-app / num-forced-atoms
@@ -368,11 +379,14 @@ to-report report-new-force
   )
 end
 
-to-report LJ-force [ r ] ; + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
+to-report LJ-poten-and-force [ r ] ; + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
   let third-pwr (sigma / r) ^ 3
   let sixth-pwr third-pwr ^ 2
-  report (48 * eps / r )* (sixth-pwr ^ 2 - (1 / 2) * sixth-pwr) + .0001
+  let twelfth-pwr sixth-pwr ^ 2
+  let force (48 * eps / r ) * (sixth-pwr ^ 2 - (1 / 2) * sixth-pwr) + .0001
   ;report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
+  let potential (4 * eps * (twelfth-pwr - sixth-pwr))
+  report list potential force
 end
 
 to-report velocity-verlet-pos [pos v a]  ; position, velocity and acceleration
@@ -384,7 +398,7 @@ to-report velocity-verlet-velocity [v a new-a]  ; velocity, acceleration, new ac
 end
 
 to set-color [v]
-  set color scale-color blue sqrt(v) -.3 1.7
+  set color scale-color blue v -.9 0
 end
 
 to-report strain
@@ -395,16 +409,15 @@ to-report stress
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
-  report (f-app-auto / min-A)
+  report (f-app / min-A)
 end
 
 to-report report-indiv-ex-force
-  ifelse force-mode = "Tension" [
-    report f-app-auto / num-forced-atoms ]
-  [ report f-app / num-forced-atoms ]
+  report f-app / num-forced-atoms
 end
 
 to color-links
+  set thickness .25 ; necessary bc the links die and reform every tick
   let min-eq-bond-len .995
   let max-eq-bond-len 1.018073
   (ifelse
@@ -448,10 +461,10 @@ ticks
 30.0
 
 BUTTON
-11
-194
-97
-227
+9
+257
+95
+290
 NIL
 setup
 NIL
@@ -465,10 +478,10 @@ NIL
 1
 
 BUTTON
-105
-194
-190
-227
+103
+257
+188
+290
 NIL
 go
 T
@@ -492,40 +505,40 @@ force-mode
 1
 
 SLIDER
-12
-288
-184
-321
+10
+351
+182
+384
 system-temp
 system-temp
 0
-.75
-0.3
-.01
+.4
+0.089
+.001
 1
 NIL
 HORIZONTAL
 
 SLIDER
-12
-331
-184
-364
+10
+394
+182
+427
 f-app
 f-app
 0
 30
-1.5
+10.9
 .1
 1
 N
 HORIZONTAL
 
 SWITCH
-19
-65
-178
-98
+17
+128
+176
+161
 create-dislocation?
 create-dislocation?
 1
@@ -535,19 +548,19 @@ create-dislocation?
 SWITCH
 879
 13
-1011
+1043
 46
-update-color?
-update-color?
+update-atom-color?
+update-atom-color?
 0
 1
 -1000
 
 CHOOSER
-14
-236
-181
-281
+12
+299
+179
+344
 lattice-view
 lattice-view
 "large-atoms" "small-atoms" "hide-atoms"
@@ -556,10 +569,10 @@ lattice-view
 SWITCH
 882
 55
-1041
+1080
 88
-diagonal-right-links
-diagonal-right-links
+show-diagonal-right-links?
+show-diagonal-right-links?
 0
 1
 -1000
@@ -567,10 +580,10 @@ diagonal-right-links
 SWITCH
 882
 95
-1034
+1074
 128
-diagonal-left-links
-diagonal-left-links
+show-diagonal-left-links?
+show-diagonal-left-links?
 0
 1
 -1000
@@ -578,34 +591,34 @@ diagonal-left-links
 SWITCH
 881
 133
-1019
+1058
 166
-horizontal-links
-horizontal-links
+show-horizontal-links?
+show-horizontal-links?
 0
 1
 -1000
 
 SLIDER
-13
-106
-185
-139
+11
+169
+183
+202
 atoms-per-row
 atoms-per-row
 5
 20
-20.0
+16.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-13
-148
-185
-181
+11
+211
+183
+244
 atoms-per-column
 atoms-per-column
 5
@@ -643,7 +656,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "if force-mode = \"Tension\" [ plotxy strain stress ]"
+"default" 1.0 2 -16777216 true "" "if force-mode = \"Tension\" [ plotxy strain stress ]"
 
 MONITOR
 884
@@ -651,7 +664,7 @@ MONITOR
 992
 461
 current f-app (N)
-f-app-auto
+f-app
 5
 1
 11
@@ -666,16 +679,6 @@ right-fl - left-fl
 5
 1
 11
-
-TEXTBOX
-1145
-98
-1369
-339
-Color Key\nLinks: \nhigh compression: dark red\nlow compression: light red (greyish red)\nequilibrium: grey\nlow tension: light yellow (greyish yellow)\nhigh tension: dark yellow\n\nAtoms: \nlow potential energy: dark blue \nhigh potential energy: light blue \npinned atoms (do not move): cyan cross\natoms affected by an external force: cyan cross, near a white line with arrows on the end \n(I'll delete this once we're happy with the interface)
-11
-0.0
-1
 
 TEXTBOX
 1125
@@ -768,43 +771,64 @@ high tension: dark yellow
 1
 
 TEXTBOX
-886
-580
-1036
-598
+889
+579
+1039
+597
 Atoms:
 11
 0.0
 1
 
 TEXTBOX
-886
-593
-1036
-611
+889
+592
+1039
+610
 low potential energy: dark blue 
 11
 102.0
 1
 
 TEXTBOX
-886
-607
-1097
-635
+889
+606
+1100
+634
 high potential energy: light blue (-> white)
 11
 107.0
 1
 
 TEXTBOX
-886
-619
-1082
-703
-pinned atoms (do not move): cyan cross\natoms affected by an external force: cyan cross, near a white line with arrows on the end 
+889
+618
+1085
+702
+pinned atoms (do not move): black cross\natoms affected by an external force: black dot, near a white line with arrows on the end 
 11
-85.0
+0.0
+1
+
+SWITCH
+13
+69
+192
+102
+auto-increment-force?
+auto-increment-force?
+0
+1
+-1000
+
+TEXTBOX
+50
+104
+200
+122
+(^ Tension only)
+11
+0.0
 1
 
 @#$#@#$#@
@@ -985,12 +1009,18 @@ false
 Circle -7500403 true true 0 0 300
 Circle -16777216 true false 30 30 240
 
+circle-dot
+true
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 88 88 124
+
 circle-x
 false
 0
 Circle -7500403 true true 0 0 300
-Rectangle -11221820 true false 0 120 315 165
-Rectangle -11221820 true false 135 -15 180 300
+Rectangle -16777216 true false 0 120 315 165
+Rectangle -16777216 true false 135 -15 180 300
 
 cow
 false
