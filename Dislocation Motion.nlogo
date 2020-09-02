@@ -101,6 +101,7 @@ to setup-atoms-and-links-and-fls
         set ex-force-applied? True
         set shape "circle-dot"
       ]
+      set num-forced-atoms count atoms with [ex-force-applied? = True]
     ]
     force-mode = "Compression" [
       ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
@@ -512,7 +513,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 10
@@ -523,7 +524,7 @@ system-temp
 system-temp
 0
 .4
-0.117
+0.336
 .001
 1
 NIL
@@ -538,7 +539,7 @@ f-app
 f-app
 0
 30
-13.8
+0.0
 .1
 1
 N

@@ -101,6 +101,7 @@ to setup-atoms-and-links-and-fls
         set ex-force-applied? True
         set shape "circle-dot"
       ]
+
     ]
     force-mode = "Compression" [
       ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
@@ -294,8 +295,9 @@ to identify-force-atoms
     ]
     force-mode = "Compression" [
       ask atoms [ set ex-force-applied?  False ]
-
-      ask atoms with [ (distancexy left-fl ycor) <= 1] [
+      let forced-atoms atoms with [ (distancexy left-fl ycor) <= 1]
+      set num-forced-atoms count forced-atoms
+      ask forced-atoms [
         set ex-force-applied?  True
     ]
   ]) ; for tension, the same atoms in the left shoulder of the sample always receive the force
@@ -511,7 +513,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 10
@@ -522,7 +524,7 @@ system-temp
 system-temp
 0
 .4
-0.117
+0.336
 .001
 1
 NIL
@@ -537,7 +539,7 @@ f-app
 f-app
 0
 30
-1.86
+0.0
 .1
 1
 N
