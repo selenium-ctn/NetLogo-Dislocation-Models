@@ -30,6 +30,7 @@ globals [
   top-neck-atoms ; agentset of atoms on the top of the neck (thin region) (tension). Used in calculating stress
   bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stress
   num-forced-atoms ; number of atoms receiving external force directly
+  unpinned-atoms ; atoms that are not pinned
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -190,12 +191,13 @@ to setup-atoms-and-links-and-fls
     set color white
   ]
   ask atoms with [pinned? = True] [ set shape "circle-x"]
+  set unpinned-atoms atoms with [pinned? = False]
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
                  ; velocity split between the x velocity and the y velocity
   let speed-avg sqrt-2-kb-over-m * sqrt system-temp
-  ask atoms with [pinned? = False] [
+  ask unpinned-atoms [
     let x-portion random-float 1
     set vx speed-avg * x-portion * positive-or-negative
     set vy speed-avg * (1 - x-portion) * positive-or-negative]
@@ -213,7 +215,7 @@ to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
   control-temp
   ask atom-links [die]
-  ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
+  ask unpinned-atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
     move
   ]
   calculate-fl-positions
@@ -249,11 +251,11 @@ to update-lattice-view
 end
 
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
-  let current-speed-avg mean [ sqrt (vx ^ 2 + vy ^ 2) ] of atoms
+  let current-speed-avg mean [ sqrt (vx ^ 2 + vy ^ 2) ] of unpinned-atoms
   let target-speed-avg sqrt-2-kb-over-m * sqrt system-temp
   let scaling-factor target-speed-avg / current-speed-avg
   if current-speed-avg != 0 [
-    ask atoms [
+    ask unpinned-atoms [
       set vx vx * scaling-factor
       set vy vy * scaling-factor
     ]
@@ -261,10 +263,8 @@ to control-temp ; this heats or cools the system based on the average temperatur
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
-  if not pinned? [
-    set xcor velocity-verlet-pos xcor vx (fx / mass)
-    set ycor velocity-verlet-pos ycor vy (fy / mass)
-  ]
+  set xcor velocity-verlet-pos xcor vx (fx / mass)
+  set ycor velocity-verlet-pos ycor vy (fy / mass)
   if xcor > max-pxcor or xcor < min-pxcor [
     die ; kills atoms when they move off the world
   ]
@@ -514,7 +514,7 @@ system-temp
 system-temp
 0
 .4
-0.344
+0.255
 .001
 1
 NIL
@@ -529,7 +529,7 @@ f-app
 f-app
 0
 30
-1.82
+1.8
 .1
 1
 N
