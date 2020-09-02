@@ -23,7 +23,7 @@ globals [
   prev-lattice-view ; the lattice view in the previous time step
   upper-left-fl ; upper left force line - shear
   left-fl ; left force line - tension, compression
-  right-fl ; right force line - tension, compression - doesn't actually move, but is used for calculations
+  right-edge ; where the right side of the sample is (xcor) - tension, compression - used in determining length of sample
   orig-length ; original length of sample
   prev-length ; length of sample in previous time step
   median-ycor ; median ycor of atoms from initial lattice setup
@@ -140,8 +140,8 @@ to setup-atoms-and-links-and-fls
   (ifelse force-mode = "Tension"  [ ; set up force lines
     create-fl-ends 2
     set left-fl xmin
-    set right-fl xmax
-    set orig-length right-fl - left-fl
+    set right-edge xmax
+    set orig-length right-edge - left-fl
     ask one-of fl-ends with [xcor = 0 and ycor = 0] [
       set xcor left-fl
       set ycor ymax + 2 ]
@@ -160,8 +160,8 @@ to setup-atoms-and-links-and-fls
     force-mode = "Compression" [
       create-fl-ends 2
       set left-fl xmin
-      set right-fl xmax
-      set orig-length right-fl - left-fl
+      set right-edge xmax
+      set orig-length right-edge - left-fl
       ask one-of fl-ends with [xcor = 0 and ycor = 0] [
         set xcor left-fl
         set ycor max-pycor - 2 ]
@@ -301,8 +301,8 @@ end
 
 
 to check-eq-adj-force ; (check equilibrium, adjust force)
-  if precision prev-length 4 = precision (right-fl - left-fl) 4 [ set f-app f-app + .1 ] ; increments f-app-auto if the sample has reached an equilibrium
-  set prev-length (right-fl - left-fl)
+  if precision prev-length 4 = precision (right-edge - left-fl) 4 [ set f-app precision (f-app + .05) 3 ] ; increments f-app-auto if the sample has reached an equilibrium
+  set prev-length (right-edge - left-fl)
 end
 
 to update-force-and-velocity-and-links
@@ -402,7 +402,7 @@ to set-color [v]
 end
 
 to-report strain
-  report ((right-fl - left-fl) - orig-length) / orig-length
+  report ((right-edge - left-fl) - orig-length) / orig-length
 end
 
 to-report stress
@@ -675,7 +675,7 @@ MONITOR
 1113
 460
 sample length (rm)
-right-fl - left-fl
+right-edge - left-fl
 5
 1
 11
