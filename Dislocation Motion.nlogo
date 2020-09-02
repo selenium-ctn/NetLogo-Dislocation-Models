@@ -30,6 +30,7 @@ globals [
   top-neck-atoms ; agentset of atoms on the top of the neck (thin region) (tension). Used in calculating stress
   bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stres
   num-forced-atoms ; number of atoms receiving external force directly
+  ;total-external-force
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -46,9 +47,6 @@ to setup
   set link-check-dist 1.5
   setup-atoms-and-links-and-fls
   init-velocity
-  (ifelse force-mode = "Shear" [ set num-forced-atoms ceiling (atoms-per-column / 2) ]
-    force-mode = "Tension" [ set num-forced-atoms count atoms with [ ex-force-applied? = True] ]
-    force-mode = "Compression" [ set num-forced-atoms atoms-per-column])
   update-lattice-view
   reset-timer
   reset-ticks
@@ -214,6 +212,7 @@ end
 
 to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
+  ;set total-external-force 0
   control-temp
   ask atom-links [die]
   ask atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
@@ -287,13 +286,17 @@ end
 to identify-force-atoms
   (ifelse force-mode = "Shear" [
     ask atoms [ set ex-force-applied?  False ]
-    ask min-n-of num-forced-atoms atoms with [ ycor >= median-ycor ] [ distancexy upper-left-fl ycor] [
+    let forced-atoms atoms with [ ycor >= median-ycor and (distancexy upper-left-fl ycor) <= 1]
+    set num-forced-atoms count forced-atoms
+    ask forced-atoms [
       set ex-force-applied?  True
     ]
     ]
     force-mode = "Compression" [
       ask atoms [ set ex-force-applied?  False ]
-      ask min-n-of num-forced-atoms atoms [ distancexy left-fl ycor] [
+      let forced-atoms atoms with [ (distancexy left-fl ycor) <= 1]
+      set num-forced-atoms count forced-atoms
+      ask forced-atoms [
         set ex-force-applied?  True
     ]
   ]) ; for tension, the same atoms in the left shoulder of the sample always receive the force
@@ -301,7 +304,7 @@ end
 
 
 to check-eq-adj-force ; (check equilibrium, adjust force)
-  if precision prev-length 4 = precision (right-edge - left-fl) 4 [ set f-app precision (f-app + .05) 3 ] ; increments f-app-auto if the sample has reached an equilibrium
+  if precision prev-length 6 = precision (right-edge - left-fl) 6 or prev-length > (right-edge - left-fl) [ set f-app precision (f-app + .01) 3 ] ; increments f-app-auto if the sample has reached an equilibrium
   set prev-length (right-edge - left-fl)
 end
 
@@ -320,12 +323,18 @@ to update-force-and-velocity-and-links
     set new-fy new-fy + (force * dy)
     ]
 
+;  if force-mode = "Tension" and new-fx > 0 [
+;    set total-external-force total-external-force + new-fx
+;    set new-fx 0
+;  ]
+
   if not pinned? [
     ; adjusting the forces to account for any external applied forces
     let ex-force 0
     if ex-force-applied? [ set ex-force report-new-force ]
     if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
     set new-fx ex-force + new-fx
+    ;set total-external-force total-external-force + ex-force
 
     ; updating velocity and force
     set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
@@ -383,7 +392,7 @@ to-report LJ-poten-and-force [ r ] ; + = attract, - = repulse (this derivative w
   let third-pwr (sigma / r) ^ 3
   let sixth-pwr third-pwr ^ 2
   let twelfth-pwr sixth-pwr ^ 2
-  let force (48 * eps / r ) * (sixth-pwr ^ 2 - (1 / 2) * sixth-pwr) + .0001
+  let force (48 * eps / r ) * (twelfth-pwr - (1 / 2) * sixth-pwr) + .0001
   ;report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
   let potential (4 * eps * (twelfth-pwr - sixth-pwr))
   report list potential force
@@ -410,6 +419,7 @@ to-report stress
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
   report (f-app / min-A)
+  ;report total-external-force / min-A
 end
 
 to-report report-indiv-ex-force
@@ -502,7 +512,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
 10
@@ -513,7 +523,7 @@ system-temp
 system-temp
 0
 .4
-0.089
+0.117
 .001
 1
 NIL
@@ -528,7 +538,7 @@ f-app
 f-app
 0
 30
-10.9
+13.8
 .1
 1
 N
