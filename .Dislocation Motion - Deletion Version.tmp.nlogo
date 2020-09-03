@@ -215,6 +215,7 @@ to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
   control-temp
   ask atom-links [die]
+  if mouse-down? [ delete-atoms ]
   ask unpinned-atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
     move
   ]
@@ -260,6 +261,11 @@ to control-temp ; this heats or cools the system based on the average temperatur
       set vy vy * scaling-factor
     ]
   ]
+end
+
+to delete-atoms
+  ask atoms with [xcor <= mouse-xcor + .5 and xcor > mouse-xcor - .5
+    and ycor < mouse-ycor + .433 and ycor > mouse-ycor - .433 ] [die]
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
@@ -382,7 +388,7 @@ to-report report-new-force
   )
 end
 
-to-report LJ-poten-and-force [ r ] ; forc the force, positive = attractive, negative = repulsive
+to-report LJ-poten-and-force [ r ] ; for the force, positive = attractive, negative = repulsive
   let third-pwr (sigma / r) ^ 3
   let sixth-pwr third-pwr ^ 2
   let twelfth-pwr sixth-pwr ^ 2
@@ -505,7 +511,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+2
 
 SLIDER
 10
@@ -531,7 +537,7 @@ f-app
 f-app
 0
 30
-1.87
+30.0
 .1
 1
 N
