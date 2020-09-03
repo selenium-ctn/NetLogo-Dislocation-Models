@@ -11,6 +11,7 @@ atoms-own [
   mass   ; mass of atom
   pinned? ; False if the atom isn't pinned in place, True if it is (for boundaries)
   ex-force-applied? ; is an external force directly applied to this atom? False if no, True if yes
+  total-PE
 ]
 
 globals [
@@ -18,7 +19,7 @@ globals [
   sigma ; used in LJ force. Distance at which intermolecular potential between 2 particles is 0
   cutoff-dist ; each atom is influenced by its neighbors within this distance (LJ force)
   dt ; time step for the velocity verlet algorithm
-  sqrt-2-kb-over-m  ; constant. Used when calculating the thermal velocity. Square root of (2 * boltzmann constant / m). Is not numerically accurate for this simulation.
+  sqrt-2-kb-over-m  ; constant. Used when calculating the thermal velocity. Square root of (2 * boltzmann constant / m). It is arbitrary for this simulation since the units are also arbitrary.
   link-check-dist ; each atom links with neighbors within this distance
   prev-lattice-view ; the lattice view in the previous time step
   upper-left-fl ; upper left force line - shear
@@ -48,7 +49,6 @@ to setup
   setup-atoms-and-links-and-fls
   init-velocity
   update-lattice-view
-  reset-timer
   reset-ticks
 end
 
@@ -101,7 +101,7 @@ to setup-atoms-and-links-and-fls
         set ex-force-applied? True
         set shape "circle-dot"
       ]
-      set num-forced-atoms count atoms with [ex-force-applied? = True]
+      set num-forced-atoms count atoms with [ex-force-applied?]
     ]
     force-mode = "Compression" [
       ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
@@ -190,8 +190,8 @@ to setup-atoms-and-links-and-fls
   ask fl-links [
     set color white
   ]
-  ask atoms with [pinned? = True] [ set shape "circle-x"]
-  set unpinned-atoms atoms with [pinned? = False]
+  ask atoms with [pinned?] [ set shape "circle-x"]
+  set unpinned-atoms atoms with [not pinned?]
 end
 
 to init-velocity ; initializes velocity for each atom based on the initial system-temp. Creates a random aspect in the
@@ -219,7 +219,7 @@ to go
     move
   ]
   calculate-fl-positions
-  if force-mode = "Tension" and auto-increment-force? [ check-eq-adj-force ]
+  if force-mode = "Tension" and auto-increment-force? [ adjust-force ]
   identify-force-atoms
   ask atoms [
     update-force-and-velocity-and-links
@@ -301,26 +301,28 @@ to identify-force-atoms ; (find the atoms closest to the force line that will be
 end
 
 
-to check-eq-adj-force ; (check equilibrium, adjust force)
-  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .01) 3 ]
-  ; increments f-app-auto if the sample has reached an equilibrium
+to adjust-force
+  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .005) 3 ]
+  ; increments f-app-auto if the sample has reached an equilibrium or if the previous sample length is greater than the current sample length
   set prev-length (right-edge - left-fl)
 end
 
 to update-force-and-velocity-and-links
   let new-fx 0
   let new-fy 0
-  let total-potential 0
+  let total-potential-energy 0
   let in-radius-atoms other atoms in-radius cutoff-dist
   ask in-radius-atoms [ ; each atom calculates the force it feels from its neighboring atoms and sums these forces
     let r distance myself
-    let indiv-poten-and-force (LJ-poten-and-force r)
-    let force item 1 indiv-poten-and-force
-    set total-potential total-potential + item 0 indiv-poten-and-force
+    let indiv-PE-and-force (LJ-poten-and-force r)
+    let force item 1 indiv-PE-and-force
+    set total-potential-energy total-potential-energy + item 0 indiv-PE-and-force
     face myself
+    rt 180
     set new-fx new-fx + (force * dx)
     set new-fy new-fy + (force * dy)
     ]
+  set total-PE total-potential-energy
 
   if not pinned? [
     ; adjusting the forces to account for any external applied forces
@@ -336,7 +338,7 @@ to update-force-and-velocity-and-links
     set fy new-fy
   ]
 
-  update-atom-color total-potential
+  update-atom-color total-PE
   update-links in-radius-atoms
 end
 
@@ -380,13 +382,13 @@ to-report report-new-force
   )
 end
 
-to-report LJ-poten-and-force [ r ] ; + = attract, - = repulse (this derivative would usually have a negative sign in front, so it's as if we multiplied it by a negative)
+to-report LJ-poten-and-force [ r ] ; for the force, positive = attractive, negative = repulsive
   let third-pwr (sigma / r) ^ 3
   let sixth-pwr third-pwr ^ 2
   let twelfth-pwr sixth-pwr ^ 2
-  let force (48 * eps / r ) * (twelfth-pwr - (1 / 2) * sixth-pwr) + .0001
-  ;report (48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
-  let potential (4 * eps * (twelfth-pwr - sixth-pwr))
+  let force (-48 * eps / r ) * (twelfth-pwr - (1 / 2) * sixth-pwr) + .0001
+  ;report (-48 * eps / r )* ((sigma / r) ^ 12 - (1 / 2) * (sigma / r) ^ 6) + .0001
+  let potential (4 * eps * (twelfth-pwr - sixth-pwr)) + .00001
   report list potential force
 end
 
@@ -402,11 +404,11 @@ to set-color [v]
   set color scale-color blue v -.9 0
 end
 
-to-report strain
+to-report strain ; tension only
   report ((right-edge - left-fl) - orig-length) / orig-length
 end
 
-to-report stress
+to-report stress ; tension only
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
@@ -514,7 +516,7 @@ system-temp
 system-temp
 0
 .4
-0.255
+0.4
 .001
 1
 NIL
@@ -529,7 +531,7 @@ f-app
 f-app
 0
 30
-1.8
+1.87
 .1
 1
 N
