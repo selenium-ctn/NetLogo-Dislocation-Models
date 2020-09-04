@@ -215,7 +215,7 @@ to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
   control-temp
   ask atom-links [die]
-  ;if mouse-down? [ delete-atoms ]
+  if mouse-down? [ delete-atoms ]
   ask unpinned-atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
     move
   ]
@@ -264,10 +264,8 @@ to control-temp ; this heats or cools the system based on the average temperatur
 end
 
 to delete-atoms
-  if mouse-down? [
-    ask atoms with [xcor <= mouse-xcor + .5 and xcor > mouse-xcor - .5
-      and ycor <= mouse-ycor + .433 and ycor > mouse-ycor - .433 ] []
-  ]
+  ask atoms with [xcor <= mouse-xcor + .5 and xcor > mouse-xcor - .5
+    and ycor <= mouse-ycor + .433 and ycor > mouse-ycor - .433 ] [die]
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
@@ -513,7 +511,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
 10
@@ -524,7 +522,7 @@ system-temp
 system-temp
 0
 .4
-0.001
+0.4
 .001
 1
 NIL
@@ -539,7 +537,7 @@ f-app
 f-app
 0
 30
-0.105
+0.0
 .1
 1
 N
@@ -840,23 +838,6 @@ TEXTBOX
 (^ Tension only)
 11
 0.0
-1
-
-BUTTON
-47
-438
-151
-471
-delete-atoms
-delete-atoms
-T
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
 1
 
 @#$#@#$#@

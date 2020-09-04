@@ -262,6 +262,14 @@ to control-temp ; this heats or cools the system based on the average temperatur
   ]
 end
 
+to delete-atoms
+  if mouse-down? [
+    ask atoms with [xcor <= mouse-xcor + .5 and xcor > mouse-xcor - .5
+      and ycor <= mouse-ycor + .433 and ycor > mouse-ycor - .433 ] [die]
+  ]
+  display
+end
+
 to move  ; atom procedure, uses velocity-verlet algorithm
   set xcor velocity-verlet-pos xcor vx (fx / mass)
   set ycor velocity-verlet-pos ycor vy (fy / mass)
@@ -516,7 +524,7 @@ system-temp
 system-temp
 0
 .4
-0.4
+0.168
 .001
 1
 NIL
@@ -531,7 +539,7 @@ f-app
 f-app
 0
 30
-1.87
+1.91
 .1
 1
 N
@@ -834,14 +842,31 @@ TEXTBOX
 0.0
 1
 
+BUTTON
+51
+434
+155
+467
+delete-atoms
+delete-atoms
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
 @#$#@#$#@
 ## WHAT IS IT?
 
-This model displays the common natural phenomenon expressed by the Coulomb's inverse-square law.  It shows what happens when the strength of the force between two charges varies inversely with the square of the distance between them.
+This model allows the user to observe the effects of external forces on a close-packed 2D crystal lattice. It also gives a qualitative image of stress/strain fields around edge dislocations. An edge dislocation can be initialized within the material, and shear, tension, or compression forces can be applied to the material. This is a Molecular Dynamics simulation, meaning an interatomic potential governs the energy and motion of each atom. Here, we are using the Lennard-Jones potential. Atoms attempt to minimize their energy by moving to an equilibrium distance from the atoms surrounding them, which means that the atoms are moved in response to the force they feel from the surrounding atoms. The position and velocity of the atoms are updated every time step with the velocity Verlet algorithm. 
 
 ## HOW IT WORKS
 
-In this model the formula used to guide each charge's behavior is the standard formula for Coulomb's law:
+The Lennard-Jones potential shows that there is an equilibrium distances between two atoms where the potential energy of each atom is minimized. If the atoms are farther than this equilibrium distance, they will attract each other, and if they are closer, they will repel each other. 
 
 F = (q1 * q2 * Permittivity) / (r^2)
 
