@@ -513,7 +513,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-1
+0
 
 SLIDER
 10
@@ -539,7 +539,7 @@ f-app
 f-app
 0
 30
-1.91
+7.3
 .1
 1
 N
@@ -552,7 +552,7 @@ SWITCH
 161
 create-dislocation?
 create-dislocation?
-1
+0
 1
 -1000
 
@@ -606,7 +606,7 @@ SWITCH
 166
 show-horizontal-links?
 show-horizontal-links?
-0
+1
 1
 -1000
 
@@ -828,7 +828,7 @@ SWITCH
 102
 auto-increment-force?
 auto-increment-force?
-0
+1
 1
 -1000
 
@@ -866,61 +866,88 @@ This model allows the user to observe the effects of external forces on a close-
 
 ## HOW IT WORKS
 
-The Lennard-Jones potential shows that there is an equilibrium distances between two atoms where the potential energy of each atom is minimized. If the atoms are farther than this equilibrium distance, they will attract each other, and if they are closer, they will repel each other. 
+The Lennard-Jones potential shows that there is an equilibrium distances between two atoms where the potential energy of each atom is minimized. If the atoms are farther than this equilibrium distance, they will attract each other, and if they are closer, they will repel each other. The potential is given by:
 
-F = (q1 * q2 * Permittivity) / (r^2)
+V = 4 * eps ((sigma / r) ^ 12 - (sigma / r) ^ 6)
 
 In this formula:
-- "F" is the force between the two charges q1 and q2.
-- "Permittivity", the constant of proportionality here, is a property of the medium in which the two charges q1 and q2 are situated.
-- "r" is the distance between the centers of the two charges.
+- "V" is the potential between two particles. 
+- "eps", or epsilon, is the depth of the potential well
+- "sigma" is the distance where the inter-particle potential is zero 
+- "r" is the distance between the centers of the two particles. 
 
-This is a single force two body model, where we have a charge q1 (the particle that is created when you press SETUP) and a proton (q2) (the blue particle that appears when you press the mouse button in the view).  If a particle is positively charged, it is colored blue. If it's negatively charged, it will be orange. The force is entirely one-way: only q1 is attracted towards (or repelled from) the proton (q2), while the proton (q2) remains unaffected.  Note that this is purely for purposes of simulation.  In the real world, Coulomb's force acts on all bodies around it.
+Taking the derivative of this potential equation yields an equation for force. A negative force means the atoms repel each other, and a positive force means they attract. 
 
-Gravity is another example of an inverse square force.  Roughly speaking, our solar system resembles a nucleus (sun) with electrons (planets) orbiting around it.
+In this model, each atom calculates the force felt from its neighbors in a 5 unit radius. This is to reduce the number of calculations and thus allow the simulation to run faster; after this distance, the force is extremely weak. These forces are summed, and passed into the velocity Verlet algorithm as the acceleration term (after being divided by the particle's mass). This algorithm is a numerical method that integrates Newton's equations of motion. Both the velocity of an atom and the position of an atom after one time step are calculated. 
 
-For certain values of q1 (which you can control by using the CHARGE slider), you can watch q1 form elliptic orbits around the mouse pointer (q2), or watch q1 slingshot around q2, similar to how a comet streaks past our sun. The charges q1 and q2 are always set equal in magnitude to each other, although they can differ in their sign.
+External forces are applied by adding a term to the total LJ force felt from neighboring atoms. This force varies based on the FORCE-MODE. In SHEAR mode, F-APP will be exerted left-to-right on atoms on the upper left of the material, while the bordering atoms on the bottom half of the crystal are pinned and do not move. The pinning of the bottom atoms represents the bottom of the material being clamped or otherwise held in place, so F-APP cannot simply rotate the lattice. In TENSION mode, F-APP is exerted leftwards on the left side of the sample. The sample shape is different in tension mode, to replicate the samples used in tensile testing. The atoms in the left shoulder are all acted on directly by the external force. The atoms farthest to the right (border of the right shoulder) are pinned. In COMPRESSION mode, F-APP is exerted rightwards on the left side of the sample. The bordering atoms on the right side are pinned. To help visiualize external forces exerted, the white line bookended by two arrows (or one, if in shear mode) shows where the external force is applied. The arrows point in the direction the force acts. In SHEAR and COMPRESSION, atoms within 1 unit of the force line are affected. 
+In this simulation, the temperature is controlled in order to reduce erratic motion from the atoms. This is done by calculating the thermal speed of the material, which entails finding the mean speed of the atoms. The thermal speed is related to temperature, so the thermal speed using the user-set system temperature is calculated. This is defined as the target speed, and the current thermal speed of the material is the current speed. The target speed is divided by the current speed, and the velocity of each atom is multiplied by this scaling factor. 
+
 
 ## HOW TO USE IT
 
-When you press the SETUP button, the charge q1 is created in a medium determined by the permittivity value from the PERMITTIVITY slider. When you click and hold down the mouse anywhere within the view, the model creates a unit of positive charge (q2) at the position of the mouse.
+Before clicking the SETUP button, you first need to select the FORCE-MODE (SHEAR / TENSION / COMPRESSION), whether you’d like a dislocation initialized (CREATE-DISLOCATION, and the size of the crystal (ATOMS-PER-ROW / ATOMS-PER-COLUMN). If you are in the TENSION FORCE-MODE, you will also need to select whether you'd like the force to be automatically increased or whether you'd like to control the force manually (AUTO-INCREMENT-FORCE). 
 
-The CHARGE slider sets the value of the charge on q1.  First, select the value of CHARGE on q1. You will see that the color of q1 reflects its charge. (For simulation ease, value of the charge on q2 is set to be the absolute value of this charge. Thus, it also determines at what distances the particles can safely orbit before they get sucked in by an overwhelming force.)
+FORCE-MODE allows the user to apply shear, tension, or compression forces to the crystal. In SHEAR mode, F-APP will be exerted left-to-right on atoms on the upper left of the material, while the bordering atoms on the bottom half of the crystal are pinned and do not move. The pinning of the bottom atoms represents the bottom of the material being clamped or otherwise held in place, so F-APP cannot simply rotate the lattice. In TENSION mode, F-APP is exerted leftwards on the left side of the sample. The sample shape is different in tension mode, to replicate the samples used in tensile testing. The atoms in the left shoulder are all acted on directly by the external force. The atoms farthest to the right (border of the right shoulder) are pinned. In COMPRESSION mode, F-APP is exerted rightwards on the left side of the sample. The bordering atoms on the right side are pinned. 
 
-The FADE-RATE slider controls how fast the paths marked by the particles fade.  At 100% there won't be any paths as they fade immediately, and at 0% the paths won't fade at all.
+AUTO-INCREMENT-FORCE (TENSION mode only) will automatically increase F-APP by .005 if the current sample length is equal to the sample length during the previous time step, or if the current sample length is shorter than the sample length during the previous time step. This is useful for producing a stress-strain curve, you can start at F-APP = 0 N and allow the simulation to run until fracture occurs.
 
-The PERMITTIVITY slider allows you to change values of the constant of proportionality in Coulomb's law. What does this variable manipulate? The charges or the medium in which the charges are immersed?
+CREATE-DISLOCATION? allows the user to initialize an edge dislocation in the top half of the lattice. It is not how the dislocation would exist within the material in an equilibrium state. Although the dislocation may exist in a metastable state within this simulation, that is due to the pinning of atoms. In an unpinned material, the dislocation would propagate out in lattices of these sizes due to surface effects and the Lennard-Jones potential governing atomic motion. 
 
-When the sliders have been set to desirable levels, press the GO button to begin the simulation.  Move the mouse to where you wish q2 to begin, and click and hold the mouse button. This will start the particles moving. If you wish to stop the simulation (say, to change the value of CHARGE), release the mouse button and the particles will stop moving. You may then change any settings you wish. Then, to continue the simulation, simply put your mouse in the window again and click and hold. Objects in the window will only move while the mouse button is pressed down within the window.
+ATOMS-PER-ROW sets the number of atoms horizontally in the lattice, while ATOMS-PER-COLUMN sets the number of atoms vertically in the lattice. 
+
+These are all of the settings that need to be selected prior to setup. The other settings can also be selected before setup, but they are able to be changed mid-simulation, while the aforementioned settings are not. The functions of the other settings are listed below. 
+
+LATTICE-VIEW provides three options for observing the crystal lattice. LARGE-ATOMS shows atoms that nearly touch each other in equilibrium, which helps to visualize close packing. SMALL-ATOMS shows atoms with a reduced diameter, which can be used with links to see both atomic movement and regions of tension and compression in the crystal. HIDE-ATOMS allows the user to hide the atoms completely and only use the links to visualize deformation within the material. 
+
+SYSTEM-TEMP sets the temperature of the system. 
+
+F-APP is the external applied force on the material. It is the total force applied, not the individual force on each atom. Units = Newtons. 
+
+DELETE-ATOMS allows the user to delete atoms by clicking on them in the display. If the button is pressed, clicking will delete atoms, and if it not pressed, clicking will do nothing. 
+
+UPDATE-ATOM-COLOR? controls whether the color of the atoms is updated. The color is an indicator of the potential energy of each atom from Lennard-Jones interactions. A lighter color means the atom has a higher potential, whereas a darker color indicates a lower potential. 
+
+DIAGONAL-RIGHT-LINKS?, DIAGONAL-LEFT-LINKS?, and HORIZONTAL-LINKS? all provide additional ways to visualize what is happening in the lattice. They are not meant to represent bonds between atoms. The options controlling DIAGONAL-RIGHT-LINKS? and DIAGONAL-LEFT-LINKS?  are particularly useful for identifying where the extra half plane is located in the plane. The links are colored based on their deviation from an equilibrium range of lengths. If the link (so the distance between two atoms) is shorter than the equilibrium range, the link will be colored a shade of red and the atoms are compressed in this direction. If the link is longer than the equilibrium range, the link will be colored a shade of yellow. If a link is within the equilibrium range, it is colored grey.
+
+The monitor EXTERNAL FORCE PER FORCED ATOM displays the individual force that each atom directly being influenced by the external force is experiencing. CURRENT F-APP is the same as the value from the F-APP slider; it is the total external force on the sample. SAMPLE LENGTH is the length of the sample from end to end. It is in terms of the equilibrium interatomic distance between two atoms (rm). The stress-strain curve only works for TENSION mode and can be used with AUTO-INCREMENT-FORCE. 
+
 
 ## THINGS TO NOTICE
 
-The most important thing to observe is the behavior of q1, the particle first placed in the world at SETUP.
+SHEAR 
 
-What is the initial velocity for q1?
+As the material deforms, how does the edge dislocation travel? 
 
-What happens as you change the value of q1 from negative to positive?
+Where are the areas of tension and compression around the edge dislocation? 
 
-As you run the model, watch the graphs on the right hand side of the world. What can you infer from the graphs about the relationship between potential energy and distance between charges? What can you say about the relationship between Coulomb's force and distance between the charges from the graphs?
+TENSION
 
-Move the mouse around and watch what happens if you move it quickly or slowly. Jiggle it around in a single place, or let it sit still. Observe what patterns the particles fall into. (You may keep FADE-RATE low to watch this explicitly.)
+When the material deforms, does it do so randomly or are there observable preferences for deformation in the material? 
+
+How does the stress-strain curve correspond to elastic deformation within the material? 
+
+How does changing the temperature change the deformation patterns within the material?
+
+COMPRESSION
+
+When the material deforms, are there sections of atoms that maintain their original shape? Or is the deformation completely random? 
 
 ## THINGS TO TRY
+Perhaps ask prof emery? Or not? 
 
-Run the simulation playing with different values of:
-a) charge - make sure to watch how different values of the CHARGE slider impact the model for any fixed value of permittivity.
-b) permittivity - make sure to watch how different values of the PERMITTIVITY slider impact the model for any fixed value of charge.
+In shear, initialize an edge dislocation and apply the smallest force possible to deform the material. Does the material continue to deform after the edge dislocation propogates out? What force is require to deform the material after the inital edge dislocation has propogated out? 
 
-Can you make q1 revolve around q2?  Imagine, if q1 would be an electron and q2 a proton, then you have just built a hydrogen atom...
+In tension, samples with larger numbers of atoms per row and smaller numbers of atoms per column are generally best for observing deformation/fracture (For example, 16 atoms per row and 13 atoms per column). Increasing the number of atoms per column also works well; you just want to maintain a sample with a long "neck" area. To produce a stress-strain curve, set F-APP to 0 N and turn AUTO-INCREMENT-FORCE? on. While running the simulation at a lower temperature creates a smoother stress-strain curve, the slip behavior differs for low and high temperatures, so it is worthwhile to run the simulation with both. 
 
-As the simulation progresses, you can take data on how
-a) Force between the two charges varies with distance between charges;
-b) Potential energy changes with distance between charges;
-c) Force depends on permittivity.
+While running the simulation, pay attention to the different directions of links. Are tension and compression concentrated in certain areas? Do they differ in different directions? 
 
-In each case, take 8 to 10 data points.  Plot your results by hand or by any plotting program.
 
 ## EXTENDING THE MODEL
+
+Add a slider to vary eps. How does changing eps affect deformation? Are smaller or larger forces needed to deform the material as eps increases? Does the material observably deform differently? 
+
+other types of atoms? 
 
 Assign a fixed position to the proton (q1), i.e., make it independent of the mouse position. Assign a variable to its magnitude.
 
