@@ -11,9 +11,7 @@ atoms-own [
   mass   ; mass of atom
   pinned? ; False if the atom isn't pinned in place, True if it is (for boundaries)
   ex-force-applied? ; is an external force directly applied to this atom? False if no, True if yes
-  total-PE
-  my-new-fx
-  my-new-fy
+  total-PE ; Potential energy of the atom
 ]
 
 globals [
@@ -34,8 +32,7 @@ globals [
   bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stress
   num-forced-atoms ; number of atoms receiving external force directly
   unpinned-atoms ; atoms that are not pinned
-  total-ex-force
-  indiv-force
+  equalizing-LJ-force ; force to counteract LJ forces in the x-direction (tension)
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -205,6 +202,11 @@ to init-velocity ; initializes velocity for each atom based on the initial syste
     let x-portion random-float 1
     set vx speed-avg * x-portion * positive-or-negative
     set vy speed-avg * (1 - x-portion) * positive-or-negative]
+  if force-mode = "Tension" [
+    ask atoms with [ ex-force-applied? ]  [
+      set vx 0
+      set vy 0 ]
+  ]
 end
 
 to-report positive-or-negative
@@ -216,8 +218,8 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  set total-ex-force 0
   if lattice-view != prev-lattice-view [ update-lattice-view ]
+  set equalizing-LJ-force 0
   control-temp
   ask atom-links [die]
   ask unpinned-atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
@@ -229,10 +231,6 @@ to go
   ask atoms [
     update-force-and-velocity-and-links
   ]
-  ifelse f-app - total-ex-force > 0 [
-    set indiv-force ( f-app - total-ex-force ) / num-forced-atoms ]
-  [set indiv-force 0 ]
-  ask atoms [update-2]
   ask atom-links [ ; stylizing/coloring links
     color-links
   ]
@@ -319,7 +317,7 @@ end
 
 
 to adjust-force
-  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .005) 3 ]
+  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .0005) 3 ]
   ; increments f-app-auto if the sample has reached an equilibrium or if the previous sample length is greater than the current sample length
   set prev-length (right-edge - left-fl)
 end
@@ -341,32 +339,28 @@ to update-force-and-velocity-and-links
     ]
   set total-PE total-potential-energy
 
-  set my-new-fx new-fx
-  set my-new-fy new-fy
-
-  if ex-force-applied? and my-new-fx > 0 [ set total-ex-force total-ex-force + new-fx
-  set my-new-fx 0 ]
-
-end
-
-to update-2
   if not pinned? [
     ; adjusting the forces to account for any external applied forces
     let ex-force 0
-    if ex-force-applied? [ set ex-force report-new-force
-    set my-new-fy 0]
+    if ex-force-applied? [
+     if force-mode = "Tension" [
+        set equalizing-LJ-force equalizing-LJ-force - new-fx
+        set new-fx 0
+        set new-fy 0
+      ]
+      set ex-force report-new-force ]
     if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
-    set my-new-fx ex-force + my-new-fx
+    set new-fx ex-force + new-fx
 
     ; updating velocity and force
-    set vx velocity-verlet-velocity vx (fx / mass) (my-new-fx / mass)
-    set vy velocity-verlet-velocity vy (fy / mass) (my-new-fy / mass)
-    set fx my-new-fx
-    set fy my-new-fy
+    set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
+    set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
+    set fx new-fx
+    set fy new-fy
   ]
 
   update-atom-color total-PE
-  ;update-links in-radius-atoms
+  update-links in-radius-atoms
 end
 
 to update-atom-color [total-force] ; updating atom color
@@ -402,7 +396,6 @@ to-report report-new-force
   set shape "circle-dot"
   (ifelse force-mode = "Tension" [
     report -1 * f-app / num-forced-atoms
-    ;report -1 * indiv-force
     ]
     [ ; Shear and Compression
       report f-app / num-forced-atoms
@@ -440,23 +433,11 @@ to-report stress ; tension only
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
-;  ifelse ( f-app - total-ex-force ) > 0
-;  [report 0]
-;  [report total-ex-force / min-A ]
-;  ifelse indiv-force != 0 [
-;    report (f-app + total-ex-force) / min-A ]
-;  [report total-ex-force / min-A ]
-  report (f-app + total-ex-force ) / min-A
+  report (-1 * ((-1 * f-app) + equalizing-LJ-force) / min-A)
 end
 
 to-report report-indiv-ex-force
   report f-app / num-forced-atoms
-end
-
-to-report rep-force
-    ifelse indiv-force != 0 [
-    report (f-app + total-ex-force) ]
-  [report total-ex-force ]
 end
 
 to color-links
@@ -556,7 +537,7 @@ system-temp
 system-temp
 0
 .4
-0.237
+0.051
 .001
 1
 NIL
@@ -571,11 +552,7 @@ f-app
 f-app
 0
 30
-<<<<<<< Updated upstream
-1.91
-=======
 0.0
->>>>>>> Stashed changes
 .1
 1
 N
@@ -599,7 +576,7 @@ SWITCH
 46
 update-atom-color?
 update-atom-color?
-1
+0
 1
 -1000
 
@@ -711,7 +688,7 @@ MONITOR
 992
 461
 current f-app (N)
-;f-app\nrep-force
+f-app
 5
 1
 11
