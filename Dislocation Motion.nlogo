@@ -12,6 +12,8 @@ atoms-own [
   pinned? ; False if the atom isn't pinned in place, True if it is (for boundaries)
   ex-force-applied? ; is an external force directly applied to this atom? False if no, True if yes
   total-PE
+  my-new-fx
+  my-new-fy
 ]
 
 globals [
@@ -32,6 +34,8 @@ globals [
   bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stress
   num-forced-atoms ; number of atoms receiving external force directly
   unpinned-atoms ; atoms that are not pinned
+  total-ex-force
+  indiv-force
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -212,6 +216,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
+  set total-ex-force 0
   if lattice-view != prev-lattice-view [ update-lattice-view ]
   control-temp
   ask atom-links [die]
@@ -224,6 +229,10 @@ to go
   ask atoms [
     update-force-and-velocity-and-links
   ]
+  ifelse f-app - total-ex-force > 0 [
+    set indiv-force ( f-app - total-ex-force ) / num-forced-atoms ]
+  [set indiv-force 0 ]
+  ask atoms [update-2]
   ask atom-links [ ; stylizing/coloring links
     color-links
   ]
@@ -332,22 +341,32 @@ to update-force-and-velocity-and-links
     ]
   set total-PE total-potential-energy
 
+  set my-new-fx new-fx
+  set my-new-fy new-fy
+
+  if ex-force-applied? and my-new-fx > 0 [ set total-ex-force total-ex-force + new-fx
+  set my-new-fx 0 ]
+
+end
+
+to update-2
   if not pinned? [
     ; adjusting the forces to account for any external applied forces
     let ex-force 0
-    if ex-force-applied? [ set ex-force report-new-force ]
+    if ex-force-applied? [ set ex-force report-new-force
+    set my-new-fy 0]
     if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
-    set new-fx ex-force + new-fx
+    set my-new-fx ex-force + my-new-fx
 
     ; updating velocity and force
-    set vx velocity-verlet-velocity vx (fx / mass) (new-fx / mass)
-    set vy velocity-verlet-velocity vy (fy / mass) (new-fy / mass)
-    set fx new-fx
-    set fy new-fy
+    set vx velocity-verlet-velocity vx (fx / mass) (my-new-fx / mass)
+    set vy velocity-verlet-velocity vy (fy / mass) (my-new-fy / mass)
+    set fx my-new-fx
+    set fy my-new-fy
   ]
 
   update-atom-color total-PE
-  update-links in-radius-atoms
+  ;update-links in-radius-atoms
 end
 
 to update-atom-color [total-force] ; updating atom color
@@ -383,6 +402,7 @@ to-report report-new-force
   set shape "circle-dot"
   (ifelse force-mode = "Tension" [
     report -1 * f-app / num-forced-atoms
+    ;report -1 * indiv-force
     ]
     [ ; Shear and Compression
       report f-app / num-forced-atoms
@@ -420,11 +440,23 @@ to-report stress ; tension only
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
-  report (f-app / min-A)
+;  ifelse ( f-app - total-ex-force ) > 0
+;  [report 0]
+;  [report total-ex-force / min-A ]
+;  ifelse indiv-force != 0 [
+;    report (f-app + total-ex-force) / min-A ]
+;  [report total-ex-force / min-A ]
+  report (f-app + total-ex-force ) / min-A
 end
 
 to-report report-indiv-ex-force
   report f-app / num-forced-atoms
+end
+
+to-report rep-force
+    ifelse indiv-force != 0 [
+    report (f-app + total-ex-force) ]
+  [report total-ex-force ]
 end
 
 to color-links
@@ -524,7 +556,7 @@ system-temp
 system-temp
 0
 .4
-0.168
+0.237
 .001
 1
 NIL
@@ -539,7 +571,11 @@ f-app
 f-app
 0
 30
+<<<<<<< Updated upstream
 1.91
+=======
+0.0
+>>>>>>> Stashed changes
 .1
 1
 N
@@ -563,7 +599,7 @@ SWITCH
 46
 update-atom-color?
 update-atom-color?
-0
+1
 1
 -1000
 
@@ -619,7 +655,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-16.0
+18.0
 1
 1
 NIL
@@ -675,7 +711,7 @@ MONITOR
 992
 461
 current f-app (N)
-f-app
+;f-app\nrep-force
 5
 1
 11
