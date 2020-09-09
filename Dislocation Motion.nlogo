@@ -11,7 +11,7 @@ atoms-own [
   mass   ; mass of atom
   pinned? ; False if the atom isn't pinned in place, True if it is (for boundaries)
   ex-force-applied? ; is an external force directly applied to this atom? False if no, True if yes
-  total-PE
+  total-PE ; Potential energy of the atom
 ]
 
 globals [
@@ -32,6 +32,7 @@ globals [
   bottom-neck-atoms ; agentset of atoms on the bottom of the neck (thin region) (tension). Used in calculating stress
   num-forced-atoms ; number of atoms receiving external force directly
   unpinned-atoms ; atoms that are not pinned
+  equalizing-LJ-force ; force to counteract LJ forces in the x-direction (tension)
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -201,6 +202,11 @@ to init-velocity ; initializes velocity for each atom based on the initial syste
     let x-portion random-float 1
     set vx speed-avg * x-portion * positive-or-negative
     set vy speed-avg * (1 - x-portion) * positive-or-negative]
+  if force-mode = "Tension" [
+    ask atoms with [ ex-force-applied? ]  [
+      set vx 0
+      set vy 0 ]
+  ]
 end
 
 to-report positive-or-negative
@@ -213,6 +219,7 @@ end
 
 to go
   if lattice-view != prev-lattice-view [ update-lattice-view ]
+  set equalizing-LJ-force 0
   control-temp
   ask atom-links [die]
   ask unpinned-atoms [ ; moving happens before velocity and force update in accordance with velocity verlet
@@ -310,7 +317,7 @@ end
 
 
 to adjust-force
-  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .005) 3 ]
+  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .0005) 3 ]
   ; increments f-app-auto if the sample has reached an equilibrium or if the previous sample length is greater than the current sample length
   set prev-length (right-edge - left-fl)
 end
@@ -335,7 +342,13 @@ to update-force-and-velocity-and-links
   if not pinned? [
     ; adjusting the forces to account for any external applied forces
     let ex-force 0
-    if ex-force-applied? [ set ex-force report-new-force ]
+    if ex-force-applied? [
+     if force-mode = "Tension" [
+        set equalizing-LJ-force equalizing-LJ-force - new-fx
+        set new-fx 0
+        set new-fy 0
+      ]
+      set ex-force report-new-force ]
     if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
     set new-fx ex-force + new-fx
 
@@ -420,7 +433,7 @@ to-report stress ; tension only
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
-  report (f-app / min-A)
+  report (-1 * ((-1 * f-app) + equalizing-LJ-force) / min-A)
 end
 
 to-report report-indiv-ex-force
@@ -513,7 +526,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 10
@@ -524,7 +537,7 @@ system-temp
 system-temp
 0
 .4
-0.168
+0.237
 .001
 1
 NIL
@@ -539,7 +552,7 @@ f-app
 f-app
 0
 30
-7.3
+0.002
 .1
 1
 N
@@ -552,18 +565,18 @@ SWITCH
 161
 create-dislocation?
 create-dislocation?
-0
+1
 1
 -1000
 
 SWITCH
-879
+882
 13
-1043
+1046
 46
 update-atom-color?
 update-atom-color?
-0
+1
 1
 -1000
 
@@ -578,10 +591,10 @@ lattice-view
 1
 
 SWITCH
-882
-55
-1080
-88
+881
+54
+1079
+87
 show-diagonal-right-links?
 show-diagonal-right-links?
 0
@@ -606,7 +619,7 @@ SWITCH
 166
 show-horizontal-links?
 show-horizontal-links?
-1
+0
 1
 -1000
 
@@ -619,7 +632,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-16.0
+18.0
 1
 1
 NIL
@@ -828,7 +841,7 @@ SWITCH
 102
 auto-increment-force?
 auto-increment-force?
-1
+0
 1
 -1000
 
@@ -942,60 +955,34 @@ In tension, samples with larger numbers of atoms per row and smaller numbers of 
 
 While running the simulation, pay attention to the different directions of links. Are tension and compression concentrated in certain areas? Do they differ in different directions? 
 
+Create vacancies with the sample in tension and compression. Does this change how the material deforms?
+
+Create a second edge dislocation in the shear mode. How does this change material deformation? 
+
 
 ## EXTENDING THE MODEL
 
 Add a slider to vary eps. How does changing eps affect deformation? Are smaller or larger forces needed to deform the material as eps increases? Does the material observably deform differently? 
 
-other types of atoms? 
+Color the atoms according to a different property than their potential energy. Suggestions include according to the magnitude of force felt or the direction of the net force on each atom. 
 
-Assign a fixed position to the proton (q1), i.e., make it independent of the mouse position. Assign a variable to its magnitude.
+Apply forces in different directions than the ones provided. Does the material deform in the same way? Why or why not? 
 
-Now create another charge of the breed "centers", and assign a fixed position to it in the graphics window.  Run the model for different positions, magnitude and signs (i.e., "+"ve or "-"ve) of the new "center".
+(Advanced) Add in another type of atom. Give this atom different properties, such as a different mass, or different radius. You will need to store a separate eps and sigma for each atom and their different types of interactions. For example, if you have A and B atoms, you will need to have an A-A eps and sigma, an A-B eps and sigma, and a B-B eps and sigma. 
 
-Create many test-charges.  Then place the two "centers", of opposite signs and comparable magnitudes, near the two horizontal edges of the world.  Now run the model.
 
 ## RELATED MODELS
 
-* Gravitation
+Ask Jacob what's in the libaray 
 
 ## NETLOGO FEATURES
 
-When a particle moves off of the edge of the world, it doesn't re-appear by wrapping onto the other side (as in most other NetLogo models). The model stops when the particle exits the world.
+When a particle moves off of the edge of the world, it doesn't re-appear by wrapping onto the other side (as in most other NetLogo models). We would use this world wrapping feature to create periodic boundary conditions if we wanted to model a bulk material. 
 
 ## CREDITS AND REFERENCES
 
-This model is a part of the NIELS curriculum. The NIELS curriculum has been and is currently under development at Northwestern's Center for Connected Learning and Computer-Based Modeling and the Mind, Matter and Media Lab at Vanderbilt University. For more information about the NIELS curriculum please refer to http://ccl.northwestern.edu/NIELS/.
 
 ## HOW TO CITE
-
-If you mention this model or the NetLogo software in a publication, we ask that you include the citations below.
-
-For the model itself:
-
-* Sengupta, P. and Wilensky, U. (2005).  NetLogo Electrostatics model.  http://ccl.northwestern.edu/netlogo/models/Electrostatics.  Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
-
-Please cite the NetLogo software as:
-
-* Wilensky, U. (1999). NetLogo. http://ccl.northwestern.edu/netlogo/. Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
-
-To cite the NIELS curriculum as a whole, please use:
-
-* Sengupta, P. and Wilensky, U. (2008). NetLogo NIELS curriculum. http://ccl.northwestern.edu/NIELS/. Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
-
-## COPYRIGHT AND LICENSE
-
-Copyright 2005 Pratim Sengupta and Uri Wilensky.
-
-![CC BY-NC-SA 3.0](http://ccl.northwestern.edu/images/creativecommons/byncsa.png)
-
-This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 License.  To view a copy of this license, visit https://creativecommons.org/licenses/by-nc-sa/3.0/ or send a letter to Creative Commons, 559 Nathan Abbott Way, Stanford, California 94305, USA.
-
-Commercial licenses are also available. To inquire about commercial licenses, please contact Uri Wilensky at uri@northwestern.edu.
-
-To use this model for academic or commercial research, please contact Pratim Sengupta at <pratim.sengupta@vanderbilt.edu> or Uri Wilensky at <uri@northwestern.edu> for a mutual agreement prior to usage.
-
-<!-- 2005 NIELS Cite: Sengupta, P. -->
 @#$#@#$#@
 default
 true
