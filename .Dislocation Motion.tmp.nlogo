@@ -42,7 +42,9 @@ globals [
 to setup
   clear-all
   set eps .07
-  set sigma .907
+  ;set sigma .907
+  ;set sigma .890916
+  set sigma .899
   set cutoff-dist 5
   set dt .1
   set sqrt-2-kb-over-m (1 / 50)
@@ -260,8 +262,8 @@ end
 to control-temp ; this heats or cools the system based on the average temperature of the system compared to the set system-temp
   let current-speed-avg mean [ sqrt (vx ^ 2 + vy ^ 2) ] of unpinned-atoms
   let target-speed-avg sqrt-2-kb-over-m * sqrt system-temp
-  let scaling-factor target-speed-avg / current-speed-avg
   if current-speed-avg != 0 [
+    let scaling-factor target-speed-avg / current-speed-avg
     ask unpinned-atoms [
       set vx vx * scaling-factor
       set vy vy * scaling-factor
@@ -317,7 +319,7 @@ end
 
 
 to adjust-force
-  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .0005) 3 ]
+  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .001) 3 ]
   ; increments f-app-auto if the sample has reached an equilibrium or if the previous sample length is greater than the current sample length
   set prev-length (right-edge - left-fl)
 end
@@ -443,7 +445,7 @@ end
 to color-links
   set thickness .25 ; necessary bc the links die and reform every tick
   let min-eq-bond-len .995
-  let max-eq-bond-len 1.018073
+  let max-eq-bond-len 1.00907
   (ifelse
     link-length < min-eq-bond-len [
       let tmp-len sqrt(min-eq-bond-len - link-length)
@@ -537,7 +539,7 @@ system-temp
 system-temp
 0
 .4
-0.237
+0.001
 .001
 1
 NIL
@@ -552,7 +554,7 @@ f-app
 f-app
 0
 30
-0.002
+0.006
 .1
 1
 N
@@ -872,6 +874,17 @@ NIL
 NIL
 1
 
+MONITOR
+38
+517
+155
+562
+NIL
+equalizing-LJ-force
+17
+1
+11
+
 @#$#@#$#@
 ## WHAT IS IT?
 
@@ -977,7 +990,7 @@ Ask Jacob what's in the libaray
 
 ## NETLOGO FEATURES
 
-When a particle moves off of the edge of the world, it doesn't re-appear by wrapping onto the other side (as in most other NetLogo models). We would use this world wrapping feature to create
+When a particle moves off of the edge of the world, it doesn't re-appear by wrapping onto the other side (as in most other NetLogo models). We would use this world wrapping feature to create periodic boundary conditions if we wanted to model a bulk material. 
 
 ## CREDITS AND REFERENCES
 
