@@ -33,6 +33,7 @@ globals [
   num-forced-atoms ; number of atoms receiving external force directly
   unpinned-atoms ; atoms that are not pinned
   equalizing-LJ-force ; force to counteract LJ forces in the x-direction (tension)
+  test
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -231,6 +232,7 @@ to go
   ask atoms [
     update-force-and-velocity-and-links
   ]
+  set test f-app + -1 * equalizing-LJ-force
   ask atom-links [ ; stylizing/coloring links
     color-links
   ]
@@ -538,7 +540,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 14
@@ -564,7 +566,7 @@ f-app
 f-app
 0
 30
-0.0
+0.002
 .1
 1
 N
@@ -884,6 +886,17 @@ NIL
 NIL
 1
 
+MONITOR
+882
+492
+939
+537
+NIL
+test
+17
+1
+11
+
 @#$#@#$#@
 ## WHAT IS IT?
 
@@ -1003,8 +1016,6 @@ Lennard-Jones model
 When a particle moves off of the edge of the world, it doesn't re-appear by wrapping onto the other side (as in most other NetLogo models). We would use this world wrapping feature to create periodic boundary conditions if we wanted to model a bulk material. 
 
 Link coloring uses the transparency feature in order to create greyish shades. In order to make links in tension (yellow) and compression (red) that are very close to equilibrium (grey) visually close to equilibrium, they are more transparent in order to produce a grey hue. The farther away a link is from equilibrium, the more opaque it is. 
-
-
 
 ## HOW TO CITE
 

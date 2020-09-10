@@ -538,7 +538,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 14
@@ -564,7 +564,7 @@ f-app
 f-app
 0
 30
-0.0
+0.002
 .1
 1
 N
