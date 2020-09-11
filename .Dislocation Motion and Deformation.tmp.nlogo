@@ -33,6 +33,7 @@ globals [
   num-forced-atoms ; number of atoms receiving external force directly
   unpinned-atoms ; atoms that are not pinned
   equalizing-LJ-force ; force to counteract LJ forces in the x-direction (tension)
+  indiv-extra-left-force-tension ; the individual extra leftwards force added to left shoulder atoms in tension. This is the part that's auto-incremented
 ]
 
 ;;;;;;;;;;;;;;;;;;;;;;
@@ -103,6 +104,7 @@ to setup-atoms-and-links-and-fls
         set shape "circle-dot"
       ]
       set num-forced-atoms count atoms with [ex-force-applied?]
+      if auto-increment-tension? [ set f-external 0 ]
     ]
     force-mode = "Compression" [
       ask atoms with [xcor = xmax or xcor = xmax - .5 ] [set pinned? True]
@@ -206,6 +208,7 @@ to init-velocity ; initializes velocity for each atom based on the initial syste
     ask atoms with [ ex-force-applied? ]  [
       set vx 0
       set vy 0 ]
+    control-temp ; readjusts temp due to initial zeroing of atoms with ex-force-applied?
   ]
 end
 
@@ -230,6 +233,9 @@ to go
   identify-force-atoms
   ask atoms [
     update-force-and-velocity-and-links
+  ]
+  if force-mode = "Tension" and auto-increment-tension? [
+    set f-external precision (equalizing-LJ-force + indiv-extra-left-force-tension) 5
   ]
   ask atom-links [ ; stylizing/coloring links
     color-links
@@ -278,10 +284,22 @@ to delete-atoms
 end
 
 to move  ; atom procedure, uses velocity-verlet algorithm
-  set xcor velocity-verlet-pos xcor vx (fx / mass)
-  set ycor velocity-verlet-pos ycor vy (fy / mass)
-  if xcor > max-pxcor or xcor < min-pxcor [
+  let next-xcor velocity-verlet-pos xcor vx (fx / mass)
+  let next-ycor velocity-verlet-pos ycor vy (fy / mass)
+  ifelse next-xcor > max-pxcor or next-xcor < min-pxcor or next-ycor > max-pycor or next-ycor < min-pycor [
     die ; kills atoms when they move off the world
+  ]
+  [
+    set xcor next-xcor
+    set ycor next-ycor
+  ]
+  if force-mode = "Compression" and xcor >= right-edge [
+    set pinned? True
+    set shape "circle-x"
+    set vx 0
+    set vy 0
+    set fx 0
+    set fy 0
   ]
 end
 
@@ -294,14 +312,14 @@ to calculate-fl-positions ; (calculate new force line positions)
     set left-fl min [xcor] of atoms
     ask fl-ends with [xcor < 0] [ set xcor left-fl ]
   ]
-  ifelse (f-app + -1 * equalizing-LJ-force) = 0 [
+  ifelse (f-external + -1 * equalizing-LJ-force) = 0 [
     ask fl-ends [ hide-turtle ]
     ask fl-links [ hide-link ]
   ]
   [
     ask fl-ends [ show-turtle ]
     ask fl-links [ show-link ]
-
+  ]
 end
 
 to identify-force-atoms ; (find the atoms closest to the force line that will be the ones receiving the external force)
@@ -325,8 +343,8 @@ end
 
 
 to adjust-force
-  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set f-app precision (f-app + .0005) 3 ]
-  ; increments f-app-auto if the sample has reached an equilibrium or if the previous sample length is greater than the current sample length
+  if precision prev-length 6 >= precision (right-edge - left-fl) 6 [ set indiv-extra-left-force-tension indiv-extra-left-force-tension + .001 ]
+  ; increments indiv-extra-left-force-tension if the sample has reached an equilibrium or if the previous sample length is greater than the current sample length
   set prev-length (right-edge - left-fl)
 end
 
@@ -351,12 +369,15 @@ to update-force-and-velocity-and-links
     ; adjusting the forces to account for any external applied forces
     let ex-force 0
     if ex-force-applied? [
-     if force-mode = "Tension" and auto-increment-tension? [
-        set equalizing-LJ-force equalizing-LJ-force - new-fx
-        set new-fx 0
+      if force-mode = "Tension" [
         set new-fy 0
+        if auto-increment-tension? [
+          set equalizing-LJ-force equalizing-LJ-force + new-fx ; for Tension, use convention that leftwards is positive
+          set new-fx 0
+        ]
       ]
-      set ex-force report-new-force ]
+      set ex-force report-external-force
+    ]
     if shape = "circle-dot" and not ex-force-applied? [ set shape "circle" ]
     set new-fx ex-force + new-fx
 
@@ -400,13 +421,18 @@ to link-with-atoms-in-cone [atom-set]
     ]
 end
 
-to-report report-new-force
+to-report report-external-force
   set shape "circle-dot"
   (ifelse force-mode = "Tension" [
-    report -1 * f-app / num-forced-atoms
+    ifelse auto-increment-tension? [
+      report -1 * indiv-extra-left-force-tension / num-forced-atoms
+    ]
+    [
+      report -1 * f-external / num-forced-atoms
+    ]
     ]
     [ ; Shear and Compression
-      report f-app / num-forced-atoms
+      report f-external / num-forced-atoms
     ]
   )
 end
@@ -441,15 +467,15 @@ to-report stress ; tension only
   let avg-max mean [ycor] of top-neck-atoms
   let avg-min mean [ycor] of bottom-neck-atoms
   let min-A avg-max - avg-min
-  report (-1 * ((-1 * f-app) + equalizing-LJ-force) / min-A)
+  report f-external / min-A
 end
 
 to-report report-indiv-ex-force
-  report (f-app + -1 * equalizing-LJ-force) / num-forced-atoms
+  report f-external / num-forced-atoms
 end
 
 to-report report-total-ex-force
-  report f-app + -1 * equalizing-LJ-force
+  report f-external
 end
 
 to color-links
@@ -467,13 +493,13 @@ to color-links
       set color insert-item 3 tmp-color (125 + (1 + tmp-len) * 30)]
     [ let tmp-color extract-rgb white
       set color insert-item 3 tmp-color 125 ])
-end
+en
 @#$#@#$#@
 GRAPHICS-WINDOW
 197
 10
-865
-679
+825
+559
 -1
 -1
 20.0
@@ -486,10 +512,10 @@ GRAPHICS-WINDOW
 1
 0
 1
--16
-16
--16
-16
+-15
+15
+-13
+13
 1
 1
 1
@@ -538,7 +564,7 @@ CHOOSER
 force-mode
 force-mode
 "Shear" "Tension" "Compression"
-0
+1
 
 SLIDER
 14
@@ -549,7 +575,7 @@ system-temp
 system-temp
 0
 .4
-0.079
+0.176
 .001
 1
 NIL
@@ -560,11 +586,11 @@ SLIDER
 384
 186
 417
-f-app
-f-app
+f-external
+f-external
 0
 30
-5.2
+5.3
 .1
 1
 N
@@ -582,20 +608,20 @@ create-dislocation?
 -1000
 
 SWITCH
-878
+839
 63
-1042
+1003
 96
 update-atom-color?
 update-atom-color?
-1
+0
 1
 -1000
 
 CHOOSER
-876
+837
 10
-1043
+1004
 55
 lattice-view
 lattice-view
@@ -603,9 +629,9 @@ lattice-view
 1
 
 SWITCH
-877
+838
 104
-1075
+1036
 137
 show-diagonal-right-links?
 show-diagonal-right-links?
@@ -614,9 +640,9 @@ show-diagonal-right-links?
 -1000
 
 SWITCH
-878
+839
 145
-1070
+1031
 178
 show-diagonal-left-links?
 show-diagonal-left-links?
@@ -625,9 +651,9 @@ show-diagonal-left-links?
 -1000
 
 SWITCH
-877
+838
 183
-1054
+1015
 216
 show-horizontal-links?
 show-horizontal-links?
@@ -644,7 +670,7 @@ atoms-per-row
 atoms-per-row
 5
 20
-18.0
+14.0
 1
 1
 NIL
@@ -666,10 +692,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-876
-225
-1080
-270
+13
+426
+191
+471
 external force per forced atom (N)
 report-indiv-ex-force
 3
@@ -677,10 +703,10 @@ report-indiv-ex-force
 11
 
 PLOT
-878
-280
-1078
-430
+838
+223
+1038
+373
 Stress-Strain Curve - Tension
 strain
 stress
@@ -695,10 +721,10 @@ PENS
 "default" 1.0 2 -16777216 true "" "if force-mode = \"Tension\" [ plotxy strain stress ]"
 
 MONITOR
-881
-445
-1007
-490
+841
+388
+967
+433
 total external force (N)
 report-total-ex-force
 5
@@ -706,10 +732,10 @@ report-total-ex-force
 11
 
 MONITOR
-1018
-445
-1134
-490
+978
+388
+1094
+433
 sample length (rm)
 right-edge - left-fl
 5
@@ -717,131 +743,81 @@ right-edge - left-fl
 11
 
 TEXTBOX
-1147
-442
-1267
-550
+1104
+386
+1224
+494
 <- in terms of the equilibrium interatomic distance between two atoms (rm)
 11
 0.0
 1
 
 TEXTBOX
-878
-501
-1028
-519
+838
+444
+988
+462
 NIL
 11
 0.0
 1
 
 TEXTBOX
-884
-500
-1034
-528
+844
+443
+994
+471
 Color Key\nLinks: 
 11
 0.0
 1
 
 TEXTBOX
-884
-530
-1034
-548
-high compression: dark red
-11
-13.0
-1
-
-TEXTBOX
-884
-545
-1091
-563
-low compression: light red (+ grey tone)
-11
-18.0
-1
-
-TEXTBOX
-883
-559
-1033
-577
+844
+482
+994
+500
 equilibrium: grey
 11
 5.0
 1
 
 TEXTBOX
-883
-572
-1086
-600
-low tension: light yellow (+ grey tone)
-11
-0.0
-1
-
-TEXTBOX
-1071
-568
-1121
-588
-■■■■
-16
-48.0
-1
-
-TEXTBOX
-884
-588
-1034
-606
-high tension: dark yellow
-11
-44.0
-1
-
-TEXTBOX
-886
-612
-1036
-630
+845
+518
+995
+536
 Atoms:
 11
 0.0
 1
 
 TEXTBOX
-886
-625
-1036
-643
+845
+531
+1016
+549
 low potential energy: dark blue 
 11
 103.0
 1
 
 TEXTBOX
-886
-639
-1097
-667
+845
+545
+1069
+573
 high potential energy: light blue (-> white)
 11
 107.0
 1
 
 TEXTBOX
-886
-651
-1082
-735
-pinned atoms (do not move): black cross\natoms affected by an external force: black dot, near a white line with arrows on the end 
+845
+560
+1041
+644
+pinned atoms (do not move): black cross\nexternally forced atoms: black dot, near a white line with arrows on the end 
 11
 0.0
 1
@@ -853,7 +829,7 @@ SWITCH
 102
 auto-increment-tension?
 auto-increment-tension?
-0
+1
 1
 -1000
 
@@ -884,42 +860,62 @@ NIL
 NIL
 1
 
+TEXTBOX
+843
+468
+1111
+496
+compression: red (darker = more compressed)
+11
+15.0
+1
+
+TEXTBOX
+844
+496
+1075
+524
+tension: yellow (darker = more stretched)
+11
+44.0
+1
+
 @#$#@#$#@
 ## WHAT IS IT?
 
-This model allows the user to observe the effects of external forces on a close-packed 2D crystal lattice. It also gives a qualitative image of stress/strain fields around edge dislocations. An edge dislocation is a type of crystal defect that is comprised of an extra half-plane inserted into a lattice. They are an important feature of almost all materials because they facilitate deformation. In this model, an edge dislocation can be initialized within the material, and shear, tension, or compression forces can be applied to the material. This is a Molecular Dynamics simulation, meaning an interatomic potential governs the energy and motion of each atom. Here, we are using the Lennard-Jones potential. Atoms attempt to minimize their potential energy by moving to an equilibrium distance away from the atoms surrounding them, which means that the atoms are moved in response to the force they feel from the surrounding atoms. The position and velocity of the atoms are updated every time step with the velocity Verlet algorithm. 
+This model allows the user to observe the effects of external forces on a close-packed 2D crystal lattice. It also gives a qualitative image of stress/strain fields around edge dislocations. An edge dislocation is a type of crystal defect that is comprised of an extra half-plane inserted into a lattice. They are an important feature of almost all materials because they facilitate deformation. In this model, an edge dislocation can be initialized within the material, and shear, tension, or compression forces can be applied to the material. This is a Molecular Dynamics simulation, meaning an interatomic potential governs the energy and motion of each atom. Here, we are using the Lennard-Jones potential. Atoms move in response to interatomic forces from the other atoms surrounding them. The resulting effect is that potential energy is minimized as the atoms move toward an equilibrium distance. The position and velocity of the atoms are updated every time step with the velocity Verlet algorithm. 
 
 ## HOW IT WORKS
 
 ### Interatomic Forces
 
-The Lennard-Jones potential shows that there is an equilibrium distance between two atoms where the potential energy of each atom is minimized. If the atoms are farther than this equilibrium distance, they will attract each other, and if they are closer, they will repel each other. The potential is given by:
+The Lennard-Jones potential is a model of the the interaction of two atoms based on their distance from each other. It has an attractive term, which represents long-range attraction based on van der Waals forces and London Dispersion forces, and a repulsive term that represent short-range repulsion caused by overlapping orbitals (Pauli repulsion). The LJ potential shows that there is an equilibrium distance between two atoms where the potential energy of each atom is minimized. If the atoms are farther than this equilibrium distance, they will attract each other, and if they are closer, they will repel each other. The potential is given by:
 
 V = 4 * eps ((sigma / r) ^ 12 - (sigma / r) ^ 6)
 
 In this formula:
-- "V" is the potential between two particles. 
+- "V" is the potential energy between two particles (intermolecular potential energy). 
 - "eps", or epsilon, is the depth of the potential well.
 - "sigma" is the distance where the inter-particle potential is zero. 
 - "r" is the distance between the centers of the two particles. 
 
-Taking the derivative of this potential equation yields an equation for force. A negative force means the atoms repel each other, and a positive force means they attract. 
+Taking the derivative of this potential equation yields an equation for force. A negative force means the atoms repel each other, and a positive force means they attract. At the equilibrium distance, the net force is zero. 
 
 In this model, each atom calculates the force felt from its neighbors in a 5 unit radius. This is to reduce the number of calculations and thus allow the simulation to run faster; after this distance, the force is extremely weak, and therefore it is acceptable to ignore interactions beyond this point. These forces are summed, and then divided by the particle's mass to yield an acceleration, which is passed into the velocity Verlet algorithm. This algorithm is a numerical method that integrates Newton's equations of motion. Both the velocity of an atom and the position of an atom after one time step are calculated. 
 
 ### External Forces
 
-External forces are applied by adding a term to the total LJ force felt from neighboring atoms. This force varies based on the FORCE-MODE. Atoms acted on directly by an external force are marked with a black "X". Pinned atoms, or atoms that do not move, are marked with a black dot. These atoms are excluded from updating position and velocity via the velocity Verlet algorithm. 
+In addition to interatomic forces, some atoms in the model feel an external force. This force varies based on the FORCE-MODE. Atoms acted on directly by an external force are marked with a black "X". Pinned atoms, or atoms that do not move, are marked with a black dot. These atoms are excluded from updating position and velocity via the velocity Verlet algorithm. 
 
-In SHEAR mode, F-APP will be exerted left-to-right on atoms in the upper left of the material, while the bordering atoms on the bottom half of the crystal are pinned and do not move. The pinning of the bottom atoms represents the bottom of the material being clamped or otherwise held in place, so F-APP cannot simply rotate the lattice. 
+In SHEAR mode, F-EXTERNAL will be exerted left-to-right on atoms in the upper left of the material, while the bordering atoms on the bottom half of the crystal are pinned and do not move. The pinning of the bottom atoms represents the bottom of the material being clamped or otherwise held in place, so F-EXTERNAL cannot simply rotate the lattice. 
 
-In TENSION mode, F-APP is exerted leftwards on the left side of the sample. The sample shape is different in tension mode, to replicate the samples used in tensile testing. The atoms in the left shoulder are all acted on directly by the external force. If AUTO-INCREMENT-TENSION? is turned on, a force to "counteract" or "equalize" the forces from Lennard-Jones interactions is first applied to shoulder atoms. Then, an additional leftwards force is applied. This creates a smooth stress-strain curve, and allows for deformation to occur in the neck region instead of the shoulder region. Shoulder region deformation would be negligible in a real life tensile test. In this simulation, the atoms farthest to the right (border of the right shoulder) are pinned. 
+In TENSION mode, F-EXTERNAL is exerted leftwards on the left side of the sample. The sample shape is different in tension mode, to replicate the samples used in tensile testing. The atoms in the left shoulder are all acted on directly by the external force. If AUTO-INCREMENT-TENSION? is turned on, a force to "counteract" or "equalize" the forces from Lennard-Jones interactions is first applied to shoulder atoms. Then, an additional leftwards force is applied. This creates a smooth stress-strain curve, and allows for deformation to occur in the neck region instead of the shoulder region. Shoulder region deformation would be negligible in a real life tensile test. Even when AUTO-INCREMENT-TENSION? is turned off, there is still an equalizing force in the y-direction to mitigate unwanted vertical movement and slipping. In this simulation, the atoms farthest to the right (border of the right shoulder) are pinned.
 
-In COMPRESSION mode, F-APP is exerted rightwards on the left side of the sample. The bordering atoms on the right side are pinned. 
+In COMPRESSION mode, F-EXTERNAL is exerted rightwards on the left side of the sample. The bordering atoms on the right side are pinned. 
 
 To help visualize external forces exerted, the white line bookended by two arrows (or one, if in shear mode) shows where the external force is applied. The arrows point in the direction the force acts. In SHEAR and COMPRESSION, atoms within 1 unit of the force line are affected. 
 
-In this simulation, the temperature is controlled in order to reduce erratic motion from the atoms. This is done by calculating the thermal speed of the material, which entails finding the mean speed of the atoms. The thermal speed is related to temperature, so the thermal speed using the user-set system temperature is calculated. This is defined as the target speed, and the current thermal speed of the material is the current speed. The target speed is divided by the current speed, and the velocity of each atom is multiplied by this scaling factor. 
+In this simulation, the temperature is controlled in order to reduce erratic motion from the atoms. This is done by calculating the thermal speed of the material, which entails finding the mean speed of the atoms. The thermal speed is related to temperature, so the desired thermal speed based on what the user sets as SYSTEM-TEMP is calculated. This is defined as the target speed, and the current thermal speed of the material is the current speed. The target speed is divided by the current speed, and the velocity of each atom is multiplied by this scaling factor. 
 
 ## HOW TO USE IT
 
@@ -927,7 +923,7 @@ Before clicking the SETUP button, you first need to select the FORCE-MODE (SHEAR
 
 FORCE-MODE allows the user to apply shear, tension, or compression forces to the crystal. Refer back to the External Forces subsection of the HOW IT WORKS section for a description of how the forces are applied. 
 
-AUTO-INCREMENT-TENSION? (TENSION mode only) will automatically increase F-APP by .0005 N if the current sample length is equal to the sample length during the previous time step, or if the current sample length is shorter than the sample length during the previous time step. This is useful for producing a stress-strain curve, you can start at F-APP = 0 N and allow the simulation to run until fracture occurs.
+AUTO-INCREMENT-TENSION? (TENSION mode only) will automatically increase F-EXTERNAL by .001 N if the current sample length is equal to the sample length during the previous time step, or if the current sample length is shorter than the sample length during the previous time step. This is useful for producing a stress-strain curve, you can start at F-EXTERNAL = 0 N and allow the simulation to run until fracture occurs.
 
 CREATE-DISLOCATION? allows the user to initialize an edge dislocation in the top half of the lattice. It is not how the dislocation would exist within the material in an equilibrium state. Although the dislocation may exist in a metastable state within this simulation, that is due to the pinning of atoms. In an unpinned material, the dislocation would usually propagate out in lattices of these nano sizes due to surface effects and the Lennard-Jones potential governing atomic motion (however, this propagation is temperature dependent, so at low enough temperatures it may be possible to form a metastable dislocation). 
 
@@ -939,15 +935,15 @@ LATTICE-VIEW provides three options for observing the crystal lattice. LARGE-ATO
 
 SYSTEM-TEMP sets the temperature of the system. 
 
-F-APP is the external applied force on the material. It is the total force applied, not the individual force on each atom. The actual numbers are arbitary, since the Lennard-Jones force has not been calibrated to model a real material. The units are in Newtons. 
+F-EXTERNAL is the external applied force on the material. It is the total force applied, not the individual force on each atom. The actual numbers are arbitrary, since the Lennard-Jones force has not been calibrated to model a real material. The units are in Newtons. 
 
 DELETE-ATOMS allows the user to delete atoms by clicking on them in the display. If the button is pressed, clicking will delete atoms, and if it is not pressed, clicking will do nothing. 
 
 UPDATE-ATOM-COLOR? controls whether the color of the atoms is updated. The color is an indicator of the potential energy of each atom from Lennard-Jones interactions. A lighter color means the atom has a higher potential, whereas a darker color indicates a lower potential. 
 
-DIAGONAL-RIGHT-LINKS?, DIAGONAL-LEFT-LINKS?, and HORIZONTAL-LINKS? all provide additional ways to visualize what is happening in the lattice. They are not meant to represent bonds between atoms. The options controlling DIAGONAL-RIGHT-LINKS? and DIAGONAL-LEFT-LINKS?  are particularly useful for identifying where the extra half plane is located in the plane. The links are colored based on their deviation from an equilibrium range of lengths. If the link (so the distance between two atoms) is shorter than the equilibrium range, the link will be colored a shade of red and the atoms are compressed in this direction. If the link is longer than the equilibrium range, the link will be colored a shade of yellow. If a link is within the equilibrium range, it is colored grey. See the Color Key on the interface for a more thorough explanation. 
+DIAGONAL-RIGHT-LINKS?, DIAGONAL-LEFT-LINKS?, and HORIZONTAL-LINKS? all provide additional ways to visualize what is happening in the lattice. They represent the strongest interatomic forces in the system (bonds), but keep in mind that atoms in the model still have weak interactions with more distant atoms. The options controlling DIAGONAL-RIGHT-LINKS? and DIAGONAL-LEFT-LINKS?  are particularly useful for identifying where the extra half plane is located in the plane. The links are colored based on their deviation from an equilibrium range of lengths. If the link (so the distance between two atoms) is shorter than the equilibrium range, the link will be colored a shade of red and the atoms are compressed in this direction. If the link is longer than the equilibrium range, the link will be colored a shade of yellow. If a link is within the equilibrium range, it is colored grey. See the Color Key on the interface for a more thorough explanation. 
 
-The monitor EXTERNAL FORCE PER FORCED ATOM displays the individual force that each atom directly being influenced by the external force is experiencing (in the case of TENSION mode when AUTO-INCREMENT-TENSION? is on, this is the average individual force). CURRENT F-APP is the total external force on the sample (in SHEAR, COMPRESSION, and TENSION without AUTO-INCREMENT-TENSION?, this is the same as the F-APP slider value). SAMPLE LENGTH is the length of the sample from end to end. It is in terms of the equilibrium interatomic distance between two atoms (rm). The stress-strain curve only works for TENSION mode and can be used with AUTO-INCREMENT-TENSION?. 
+The monitor EXTERNAL FORCE PER FORCED ATOM displays the individual force that each atom directly being influenced by the external force is experiencing (in the case of TENSION mode when AUTO-INCREMENT-TENSION? is on, this is the average individual force). CURRENT F-EXTERNAL is the total external force on the sample (in SHEAR, COMPRESSION, and TENSION without AUTO-INCREMENT-TENSION?, this is the same as the F-EXTERNAL slider value). SAMPLE LENGTH is the length of the sample from end to end. It is in terms of the equilibrium interatomic distance between two atoms (rm). The stress-strain curve only works for TENSION mode and can be used with AUTO-INCREMENT-TENSION?. 
 
 ## THINGS TO NOTICE
 
@@ -956,6 +952,8 @@ SHEAR
 As the material deforms, how does the edge dislocation travel? 
 
 Where are the areas of tension and compression around the edge dislocation? 
+
+If a dislocation is initialized and no forces are applied, how does it exit the material? Does it differ based on crystal dimensions or the system temperature? 
 
 TENSION
 
@@ -973,7 +971,7 @@ When the material deforms, are there sections of atoms that maintain their origi
 
 In shear, initialize an edge dislocation and apply the smallest force possible to deform the material. Does the material continue to deform after the edge dislocation propagates out? What force is require to deform the material after the initial edge dislocation has propagated out? 
 
-In tension, samples with larger numbers of atoms per row and smaller numbers of atoms per column are generally best for observing deformation/fracture (For example, 18 atoms per row and 13 atoms per column). Increasing the number of atoms per column also works well; you just want to maintain a sample with a long "neck" area. To produce a stress-strain curve, set F-APP to 0 N and turn AUTO-INCREMENT-TENSION? on. While running the simulation at a lower temperature creates a smoother stress-strain curve, the slip behavior differs for low and high temperatures, so it is worthwhile to run the simulation with both. 
+In tension, samples with larger numbers of atoms per row and smaller numbers of atoms per column are generally best for observing deformation/fracture (For example, 18 atoms per row and 13 atoms per column). Increasing the number of atoms per column also works well; you just want to maintain a sample with a long "neck" area. To produce a stress-strain curve, set F-EXTERNAL to 0 N and turn AUTO-INCREMENT-TENSION? on. While running the simulation at a lower temperature creates a smoother stress-strain curve, the slip behavior differs for low and high temperatures, so it is worthwhile to run the simulation with both. 
 
 While running the simulation, pay attention to the different directions of links. Are tension and compression concentrated in certain areas? Do they differ in different directions? 
 
@@ -985,7 +983,7 @@ Create a second edge dislocation in the shear mode by deleting atoms. How does t
 
 Add a slider to vary eps (epsilon). How does changing eps affect deformation? Are smaller or larger forces needed to deform the material as eps increases? Does the material observably deform differently? 
 
-Color the atoms according to a different property than their potential energy. Suggestions include according to the magnitude of force felt or the direction of the net force on each atom. 
+Color the atoms according to a different property than their potential energy. Suggestions include according to the magnitude of force felt, the direction of the net force on each atom, or the kinetic energy. 
 
 Apply forces in different directions than the ones provided. Does the material deform in the same way? Why or why not? 
 
